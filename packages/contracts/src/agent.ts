@@ -148,8 +148,19 @@ export type RunAgentInput = z.infer<typeof runAgentSchema>;
  */
 export const resumeAgentSchema = z.object({
   sessionId: idSchema,
-  toolCallId: z.string().min(1),
-  approved: z.boolean(),
+  /**
+   * One decision per pending action, in the order they were offered. A
+   * rejection carries the reason so the model can re-plan rather than simply
+   * being refused.
+   */
+  decisions: z
+    .array(
+      z.object({
+        type: z.enum(['approve', 'reject']),
+        message: z.string().max(500).optional(),
+      }),
+    )
+    .min(1),
 });
 export type ResumeAgentInput = z.infer<typeof resumeAgentSchema>;
 
@@ -192,11 +203,18 @@ export const agentTodoSchema = z.object({
 });
 export type AgentTodo = z.infer<typeof agentTodoSchema>;
 
-/** A write the agent stopped on, still waiting for an answer. */
+/**
+ * A write the agent stopped on, still waiting for an answer.
+ *
+ * Identified by position, not by id: the interrupt carries a list of actions
+ * with a name and arguments and no identifier of any kind, and decisions are
+ * matched back to them by order.
+ */
 export const pendingApprovalSchema = z.object({
-  toolCallId: z.string(),
+  index: z.number().int().min(0),
   toolName: z.string(),
   args: z.record(z.string(), z.unknown()),
+  description: z.string().nullable(),
 });
 export type PendingApproval = z.infer<typeof pendingApprovalSchema>;
 
@@ -212,7 +230,8 @@ export const sessionStateSchema = z.object({
   messages: z.array(transcriptTurnSchema),
   files: z.array(agentFileSchema),
   todos: z.array(agentTodoSchema),
-  pendingApproval: pendingApprovalSchema.nullable(),
+  /** Empty unless the agent is waiting on the user before a write. */
+  pendingApprovals: z.array(pendingApprovalSchema),
 });
 export type SessionState = z.infer<typeof sessionStateSchema>;
 

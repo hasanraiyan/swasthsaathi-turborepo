@@ -92,7 +92,7 @@ export class AgentService {
       messages: normalizeTurns(snapshot.values?.messages ?? []),
       files: toFiles(snapshot.values?.files),
       todos: toTodos(snapshot.values?.todos),
-      pendingApproval: firstPendingApproval(snapshot.tasks),
+      pendingApprovals: pendingApprovals(snapshot.tasks),
     };
   }
 
@@ -101,13 +101,13 @@ export class AgentService {
   }
 
   resume(actor: Actor, input: ResumeAgentInput): AsyncGenerator<AguiEvent> {
-    return this.stream(actor, input.sessionId, { approved: input.approved });
+    return this.stream(actor, input.sessionId, { decisions: input.decisions });
   }
 
   private async *stream(
     actor: Actor,
     sessionId: string | undefined,
-    start: { message: string } | { approved: boolean },
+    start: { message: string } | { decisions: ResumeAgentInput['decisions'] },
   ): AsyncGenerator<AguiEvent> {
     if (!this.models.isConfigured) {
       yield runError(
@@ -149,16 +149,14 @@ export class AgentService {
       const input =
         'message' in start
           ? { messages: [new HumanMessage(start.message)] }
-          : new Command({
-              resume: { decision: start.approved ? 'accept' : 'reject' },
-            });
+          : new Command({ resume: { decisions: start.decisions } });
 
       for await (const event of agent.streamEvents(input, config)) {
         yield* translator.translate(event);
       }
       yield* translator.finish();
 
-      yield* this.reportPause(agent, config, session.id);
+      yield* this.reportPause(agent, session.id);
       await this.sessions.touch(actor, session.id);
 
       if (titleWork) {
@@ -193,26 +191,24 @@ export class AgentService {
    * pending call sits in the interrupt, and the client answers it through
    * `/agent/resume`.
    */
+  /**
+   * If the graph stopped before a write, say what it is waiting for.
+   *
+   * Built from the same reader the reload path uses, so what a client sees
+   * live and what it sees after reopening cannot drift apart.
+   */
   private async *reportPause(
-    agent: { getState: (config: unknown) => Promise<unknown> },
-    config: unknown,
+    agent: { getState: (config: unknown) => unknown },
     sessionId: string,
   ): AsyncGenerator<AguiEvent> {
     try {
-      const state = (await agent.getState(config)) as
-        { tasks?: PendingTask[] } | undefined;
-      const interrupts = (state?.tasks ?? []).flatMap(
-        (task) => task.interrupts ?? [],
-      );
-
-      for (const interrupt of interrupts) {
-        const request =
-          interrupt.value?.action_requests?.[0] ?? interrupt.value ?? {};
+      const snapshot = await readGraphState(agent, sessionId);
+      for (const approval of pendingApprovals(snapshot.tasks)) {
         yield confirmationRequired(
-          asText(request.tool_call_id) ?? sessionId,
-          asText(request.action) ?? asText(request.name) ?? 'action',
-          request.args ?? {},
-          'This will change your health record.',
+          approval.index,
+          approval.toolName,
+          approval.args,
+          approval.description ?? 'This will change your health record.',
         );
       }
     } catch (error) {
@@ -236,15 +232,6 @@ async function readGraphState(
     agent.getState({ configurable: { thread_id: threadId } }),
   );
   return snapshot ?? {};
-}
-
-/**
- * The interrupt payload is untyped, so a field that should be a string might
- * be anything. Anything that isn't one is treated as absent rather than
- * stringified into `[object Object]`.
- */
-function asText(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 interface StoredMessage {
@@ -376,32 +363,39 @@ function toTodos(raw: unknown): AgentTodo[] {
  * has to survive closing the app, or the conversation is stuck with no way
  * to see why.
  */
-function firstPendingApproval(
-  tasks: PendingTask[] | undefined,
-): PendingApproval | null {
+function pendingApprovals(tasks: PendingTask[] | undefined): PendingApproval[] {
+  const approvals: PendingApproval[] = [];
+
   for (const task of tasks ?? []) {
     for (const interrupt of task.interrupts ?? []) {
-      const request =
-        interrupt.value?.action_requests?.[0] ?? interrupt.value ?? {};
-      const toolCallId = asText(request.tool_call_id);
-      const toolName = asText(request.action) ?? asText(request.name);
-      if (toolCallId && toolName) {
-        return {
-          toolCallId,
-          toolName: fromToolName(toolName),
+      // `actionRequests`, camelCase, each `{ name, args, description? }` --
+      // there is no id anywhere in it, which is why decisions are positional.
+      const requests = interrupt.value?.actionRequests ?? [];
+      requests.forEach((request, index) => {
+        approvals.push({
+          index,
+          toolName: fromToolName(request.name ?? ''),
           args: (request.args ?? {}) as Record<string, unknown>,
-        };
-      }
+          description:
+            typeof request.description === 'string'
+              ? request.description
+              : null,
+        });
+      });
     }
   }
-  return null;
+
+  return approvals;
 }
 
 interface PendingTask {
   interrupts?: Array<{
     value?: {
-      action_requests?: Array<Record<string, unknown>>;
-      [key: string]: unknown;
+      actionRequests?: Array<{
+        name?: string;
+        args?: unknown;
+        description?: unknown;
+      }>;
     };
   }>;
 }

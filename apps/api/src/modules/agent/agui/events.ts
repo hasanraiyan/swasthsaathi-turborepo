@@ -74,14 +74,16 @@ export const toolCallResult = (
  * their health record unasked; the client answers through `/agent/resume`.
  */
 export const confirmationRequired = (
-  toolCallId: string,
-  toolCallName: string,
+  index: number,
+  toolName: string,
   args: unknown,
   description: string,
 ): AguiEvent =>
   event(EventType.CUSTOM, {
     name: 'tool.confirmation_required',
-    value: { toolCallId, toolCallName, args, description },
+    // By position: the interrupt carries no id, and the decisions sent back
+    // are matched to the pending actions by order.
+    value: { index, toolName, args, description },
   });
 
 /** Lets the session list rename itself mid-stream instead of refetching. */
