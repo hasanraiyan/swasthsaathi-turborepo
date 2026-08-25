@@ -190,6 +190,26 @@ async function main() {
   expect('no tobacco checks for a non-user', !youngKeys.includes('oral_cancer_screening'));
   expect('but still has preventive checks to do', youngKeys.length >= 4);
 
+  // A profile written before the baseline fields existed comes back with
+  // those keys missing, not empty -- Mongoose applies defaults on insert and
+  // never to documents already in the collection. Inserted through the raw
+  // driver so it is exactly the shape every pre-existing user's document has.
+  await connection.collection('profiles').insertOne({
+    userId: 'user_legacy',
+    fullName: 'Written before the baseline existed',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const legacy: Actor = { userId: 'user_legacy' };
+  const legacyPlan = (await registry.invoke('prevention.plan', legacy)) as {
+    checks: unknown[];
+    snapshot: { baselineComplete: boolean };
+  };
+  expect(
+    'a profile predating the baseline fields still produces a plan',
+    Array.isArray(legacyPlan.checks) && legacyPlan.snapshot.baselineComplete === false,
+  );
+
   // Ownership check: a different user must not see any of it.
   const intruder: Actor = { userId: 'user_intruder' };
   try {
