@@ -1,0 +1,171 @@
+name: Build Android Release (mobile)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build format'
+        required: true
+        default: 'aab'
+        type: choice
+        options:
+          - aab
+          - apk
+          - both
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: apps/mobile
+
+jobs:
+  build:
+    name: Build Android (${{ github.run_number }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📱 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 🔢 Bump Android versionCode (release builds only)
+        id: version
+        env:
+          BUILD_TYPE: ${{ github.event.inputs.build_type }}
+        run: |
+          # versionCode lives in app.json (git is the source of truth), not the
+          # CI run number -- a plain 'apk' dispatch is for local/device testing
+          # only (Play doesn't see it), so it reuses the current committed
+          # value instead of consuming a new one.
+          if [ "$BUILD_TYPE" = "apk" ]; then
+            export IS_RELEASE=false
+          else
+            export IS_RELEASE=true
+          fi
+          node -e "
+            const fs = require('fs');
+            const isRelease = process.env.IS_RELEASE === 'true';
+            const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            app.expo.android = app.expo.android || {};
+            const current = app.expo.android.versionCode || 1;
+            const next = isRelease ? current + 1 : current;
+            app.expo.android.versionCode = next;
+            fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+            console.log((isRelease ? 'Bumped' : 'Reusing'), 'android.versionCode:', next);
+          "
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: 📥 Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: 🚀 Prebuild Android project
+        run: pnpm exec expo prebuild --platform android --clean
+
+      - name: 🔐 Setup Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+            echo "Release keystore decoded."
+
+            # Map Gradle signing properties
+            echo "" >> android/gradle.properties
+            echo "MYAPP_UPLOAD_STORE_FILE=release.keystore" >> android/gradle.properties
+            echo "MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS" >> android/gradle.properties
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> android/gradle.properties
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD" >> android/gradle.properties
+
+            # Configure build.gradle with release signingConfig
+            node -e "
+              const fs = require('fs');
+              const file = 'android/app/build.gradle';
+              let lines = fs.readFileSync(file, 'utf8').split('\n');
+              let out = [];
+              for (let line of lines) {
+                out.push(line);
+                if (line.trim() === 'signingConfigs {') {
+                  out.push('        release {');
+                  out.push('            if (project.hasProperty(\"MYAPP_UPLOAD_STORE_FILE\")) {');
+                  out.push('                storeFile file(MYAPP_UPLOAD_STORE_FILE)');
+                  out.push('                storePassword MYAPP_UPLOAD_STORE_PASSWORD');
+                  out.push('                keyAlias MYAPP_UPLOAD_KEY_ALIAS');
+                  out.push('                keyPassword MYAPP_UPLOAD_KEY_PASSWORD');
+                  out.push('            }');
+                  out.push('        }');
+                }
+              }
+              let content = out.join('\n');
+              content = content.replace(/(buildTypes\s*\{[\s\S]*?release\s*\{[\s\S]*?signingConfig\s+)signingConfigs\.[a-zA-Z0-9_]+/, '\$1signingConfigs.release');
+              fs.writeFileSync(file, content);
+              console.log('Successfully configured release signing in android/app/build.gradle');
+            "
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret set -- building unsigned."
+          fi
+
+      - name: 🔨 Build Release APK & AAB
+        working-directory: apps/mobile/android
+        run: |
+          BUILD_CHOICE="${{ github.event.inputs.build_type }}"
+          if [ "$BUILD_CHOICE" = "apk" ]; then
+            ./gradlew assembleRelease --no-daemon
+          elif [ "$BUILD_CHOICE" = "aab" ]; then
+            ./gradlew bundleRelease --no-daemon
+          else
+            ./gradlew assembleRelease bundleRelease --no-daemon
+          fi
+
+      - name: 📤 Upload Release APK
+        if: github.event.inputs.build_type != 'aab'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-v${{ github.run_number }}-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: 📤 Upload Release AAB (Play Store)
+        if: github.event.inputs.build_type != 'apk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-v${{ github.run_number }}-aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          retention-days: 14
+
+      - name: 💾 Commit bumped versionCode
+        if: steps.version.outputs.is_release == 'true'
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/mobile/app.json
+          if git diff --cached --quiet; then
+            echo "No versionCode change to commit."
+          else
+            git commit -m "chore: bump mobile android versionCode to $(node -pe "require('./apps/mobile/app.json').expo.android.versionCode")"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
