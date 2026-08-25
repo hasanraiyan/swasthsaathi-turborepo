@@ -20,7 +20,32 @@ export const colors = {
   // Input borders -- a UI boundary, so held to the 3:1 non-text minimum
   // rather than the 4.5:1 text minimum.
   border: '#8F8270',
+  // Hairline separators inside cards, where a 3:1 boundary would shout.
+  hairline: '#E6DFD2',
   brick: '#B23A2E',
+} as const;
+
+/**
+ * Dose and record states, as a fill plus a text-safe ink.
+ *
+ * Colour alone never carries the meaning -- every use pairs these with a word
+ * ("Taken", "Missed"), because a schedule someone reads at 6am while unwell
+ * has to survive both colour blindness and a dim screen.
+ */
+export const statusColors = {
+  taken: { fill: '#E4EFE7', ink: '#1F4B3F' },
+  pending: { fill: '#FBF0DC', ink: '#895810' },
+  missed: { fill: '#F7E3E0', ink: '#8E2B21' },
+  skipped: { fill: '#EDE9E1', ink: '#5C5348' },
+} as const;
+
+/** Type scale. Display sizes use Fraunces; the rest is the system face. */
+export const type = {
+  display: { fontFamily: 'Fraunces_600SemiBold', fontSize: 28, lineHeight: 34 },
+  title: { fontFamily: 'Fraunces_600SemiBold', fontSize: 20, lineHeight: 26 },
+  body: { fontSize: 16, lineHeight: 23 },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const, letterSpacing: 0.3 },
+  caption: { fontSize: 13, lineHeight: 18 },
 } as const;
 
 export const fonts = {

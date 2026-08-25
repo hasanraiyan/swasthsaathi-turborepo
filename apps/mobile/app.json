@@ -3,6 +3,7 @@
     "name": "SwasthSaathi",
     "slug": "swasthsaathi",
     "version": "1.0.0",
+    "scheme": "swasthsaathi",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,7 +28,8 @@
     "plugins": [
       "expo-secure-store",
       "@clerk/expo",
-      "expo-font"
+      "expo-font",
+      "expo-router"
     ]
   }
 }

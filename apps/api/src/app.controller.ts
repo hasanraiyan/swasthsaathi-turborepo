@@ -1,7 +1,9 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import type { Actor } from '@repo/contracts';
+
 import { AppService } from './app.service';
+import { CurrentActor } from './auth/actor.decorator';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
-import { CurrentUser } from './auth/current-user.decorator';
 
 @Controller()
 export class AppController {
@@ -14,7 +16,7 @@ export class AppController {
 
   @UseGuards(ClerkAuthGuard)
   @Get('me')
-  getMe(@CurrentUser() auth: { userId: string; sessionId: string }) {
-    return auth;
+  getMe(@CurrentActor() actor: Actor): Actor {
+    return actor;
   }
 }

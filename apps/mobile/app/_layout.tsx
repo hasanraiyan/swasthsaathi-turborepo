@@ -1,0 +1,138 @@
+import { ClerkLoaded, ClerkLoading, ClerkProvider, useAuth } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
+// Import each weight from its own subpath, not the package barrel -- the
+// barrel requires every weight's .ttf, which Metro then bundles in full
+// (~2.8MB for all 18 Fraunces weights) regardless of what is used.
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces/600SemiBold';
+import { Fraunces_600SemiBold_Italic } from '@expo-google-fonts/fraunces/600SemiBold_Italic';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { clerkAppearance, colors } from '../theme';
+
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+if (!publishableKey) {
+  throw new Error('Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to apps/mobile/.env.local');
+}
+
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Fraunces_600SemiBold,
+    Fraunces_600SemiBold_Italic,
+  });
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            staleTime: 30_000,
+            // A phone that's been in a pocket for an hour should show fresh
+            // medicine times the moment it's opened.
+            refetchOnMount: true,
+          },
+        },
+      }),
+  );
+
+  useEffect(() => {
+    if (fontError) {
+      console.warn('Display font failed to load, falling back to system:', fontError);
+    }
+  }, [fontError]);
+
+  // Never block forever on a font: fall through to the system face instead.
+  if (!fontsLoaded && !fontError) {
+    return <Splash />;
+  }
+
+  return (
+    <SafeAreaProvider>
+      <ClerkProvider
+        publishableKey={publishableKey}
+        tokenCache={tokenCache}
+        appearance={clerkAppearance}
+      >
+        <QueryClientProvider client={queryClient}>
+          <ClerkLoading>
+            <Splash />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <AuthGate />
+          </ClerkLoaded>
+          <StatusBar style="dark" />
+        </QueryClientProvider>
+      </ClerkProvider>
+    </SafeAreaProvider>
+  );
+}
+
+/**
+ * Keeps the route tree and the session in step.
+ *
+ * Both directions matter: a signed-out user must never land inside the tabs,
+ * and a user who has just signed in must not be left staring at the sign-in
+ * screen.
+ */
+function AuthGate() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoaded) {
+      return;
+    }
+    const onSignIn = segments[0] === 'sign-in';
+    if (!isSignedIn && !onSignIn) {
+      router.replace('/sign-in');
+    } else if (isSignedIn && onSignIn) {
+      router.replace('/');
+    }
+  }, [isLoaded, isSignedIn, segments, router]);
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.cream },
+        headerTintColor: colors.pine,
+        headerTitleStyle: { fontFamily: 'Fraunces_600SemiBold', color: colors.ink },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.cream },
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="medicines/new" options={{ title: 'Add medicine' }} />
+      <Stack.Screen name="medicines/[id]" options={{ title: 'Medicine' }} />
+      <Stack.Screen name="conditions/index" options={{ title: 'Conditions' }} />
+      <Stack.Screen name="doctors/index" options={{ title: 'Doctors' }} />
+      <Stack.Screen name="appointments/index" options={{ title: 'Appointments' }} />
+      <Stack.Screen name="symptoms/index" options={{ title: 'Symptoms' }} />
+      <Stack.Screen name="measurements/index" options={{ title: 'Readings' }} />
+    </Stack>
+  );
+}
+
+function Splash() {
+  return (
+    <View style={styles.splash}>
+      <ActivityIndicator color={colors.pine} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cream,
+  },
+});
