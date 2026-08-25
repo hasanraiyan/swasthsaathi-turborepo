@@ -91,7 +91,7 @@ export class ReferenceValidator {
     }
     const objectId = new Types.ObjectId(id);
     const exists = await model
-      .exists({ _id: objectId, userId: actor.userId } as never)
+      .exists({ _id: objectId, userId: actor.userId })
       .exec();
     if (!exists) {
       throw new InvalidInputError(

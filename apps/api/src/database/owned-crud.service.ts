@@ -86,12 +86,12 @@ export abstract class OwnedCrudService<TDoc, TRecord> {
     actor: Actor,
     data: Record<string, unknown>,
   ): Promise<TRecord> {
-    // The cast bridges a plain attribute bag to Mongoose's generated document
-    // type; the schema's own validators are the real check.
+    // Attributes go in as a plain bag; the schema's own validators are the
+    // real check on what lands in the collection.
     const created = await new this.model({
       ...data,
       userId: actor.userId,
-    } as unknown as TDoc).save();
+    }).save();
     return serialize<TRecord>(created.toObject());
   }
 
