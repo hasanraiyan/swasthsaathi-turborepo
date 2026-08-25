@@ -1,3 +1,6 @@
+import { Platform } from 'react-native';
+import type { TextStyle } from 'react-native';
+
 /**
  * SwasthSaathi visual identity.
  *
@@ -67,6 +70,27 @@ export const radii = {
   button: 28,
   avatar: 999,
 } as const;
+
+/**
+ * Suppress the browser's own focus ring on text inputs.
+ *
+ * `react-native-web` renders `TextInput` as a real DOM input, so the browser
+ * draws its focus outline -- a heavy black ring in current Chrome -- outside
+ * our border, which looks like a bug. `outlineStyle` is a web-only style, so
+ * it is cast once here rather than at every call site.
+ *
+ * Always pair it with `inputBorderColor` below: dropping the ring without
+ * replacing it would leave anyone navigating by keyboard unable to see where
+ * they are.
+ */
+export const webOutlineReset = (
+  Platform.OS === 'web' ? { outlineStyle: 'none' } : {}
+) as unknown as TextStyle;
+
+/** The focus indicator we show instead of the browser's. */
+export function inputBorderColor(focused: boolean): string {
+  return focused ? colors.pine : colors.border;
+}
 
 // Theme for Clerk's official prebuilt UI components (@clerk/expo/web), so
 // they match the native custom-flow screens instead of Clerk's default

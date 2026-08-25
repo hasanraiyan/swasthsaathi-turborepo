@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { colors, radii, spacing, type } from '../../theme';
+import { colors, inputBorderColor, radii, spacing, type, webOutlineReset } from '../../theme';
 
 /**
  * Date of birth as three plainly-labelled numbers.
@@ -72,17 +72,21 @@ function Part({
   maxLength: number;
   wide?: boolean;
 }) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={[styles.part, wide && styles.partWide]}>
       <TextInput
         accessibilityLabel={label}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         value={value}
         // Strip anything that isn't a digit rather than rejecting the whole
         // entry, so a stray character doesn't lose what was already typed.
         onChangeText={(next) => onChangeText(next.replace(/\D/g, '').slice(0, maxLength))}
         keyboardType="number-pad"
         maxLength={maxLength}
-        style={styles.input}
+        style={[styles.input, webOutlineReset, { borderColor: inputBorderColor(focused) }]}
         placeholder={label === 'Year' ? '1985' : label === 'Month' ? 'MM' : 'DD'}
         placeholderTextColor={colors.taupe}
       />

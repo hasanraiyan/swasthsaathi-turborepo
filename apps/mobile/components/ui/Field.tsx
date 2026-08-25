@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 
-import { colors, radii, spacing, type } from '../../theme';
+import { colors, inputBorderColor, radii, spacing, type, webOutlineReset } from '../../theme';
 
 interface FieldProps {
   label: string;
@@ -25,6 +26,8 @@ export function Field({
   multiline = false,
   autoCapitalize = 'sentences',
 }: FieldProps) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
@@ -32,12 +35,19 @@ export function Field({
         accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         placeholderTextColor={colors.taupe}
         keyboardType={keyboardType}
         multiline={multiline}
         autoCapitalize={autoCapitalize}
-        style={[styles.input, multiline && styles.multiline]}
+        style={[
+          styles.input,
+          webOutlineReset,
+          { borderColor: inputBorderColor(focused) },
+          multiline && styles.multiline,
+        ]}
       />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>

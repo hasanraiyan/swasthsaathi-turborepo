@@ -1,7 +1,8 @@
 import Feather from '@expo/vector-icons/Feather';
+import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { colors, spacing, type } from '../../theme';
+import { colors, inputBorderColor, spacing, type, webOutlineReset } from '../../theme';
 
 interface ComposerProps {
   value: string;
@@ -12,16 +13,21 @@ interface ComposerProps {
 
 export function Composer({ value, onChangeText, onSend, disabled = false }: ComposerProps) {
   const canSend = value.trim().length > 0 && !disabled;
+  const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { borderColor: inputBorderColor(focused) }]}>
       <TextInput
         accessibilityLabel="Message Swasthya Saathi"
         value={value}
         onChangeText={onChangeText}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder="Ask about your health record"
         placeholderTextColor={colors.taupe}
-        style={styles.input}
+        // The border lives on the wrapper, so the input shows no ring of its
+        // own -- including the browser's.
+        style={[styles.input, webOutlineReset]}
         multiline
         // Leaves room for a few lines before the field starts scrolling.
         maxLength={2000}
