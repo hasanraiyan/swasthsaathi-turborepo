@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "SwasthSaathi",
+    "slug": "swasthsaathi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,7 @@
       "package": "com.swasthsaathi.mobile",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FAF6EE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -26,7 +26,8 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@clerk/expo"
+      "@clerk/expo",
+      "expo-font"
     ]
   }
 }
