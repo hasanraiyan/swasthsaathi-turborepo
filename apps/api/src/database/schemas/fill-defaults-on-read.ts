@@ -28,17 +28,25 @@ export function fillDefaultsOnRead(schema: Schema): void {
     const target = doc as Plain;
 
     schema.eachPath((pathName, schemaType) => {
-      if (pathName === '_id' || pathName === '__v' || target[pathName] !== undefined) {
+      if (
+        pathName === '_id' ||
+        pathName === '__v' ||
+        target[pathName] !== undefined
+      ) {
         return;
       }
 
-      const declared = (schemaType as unknown as { options?: { default?: unknown } }).options
-        ?.default;
+      const declared = (
+        schemaType as unknown as { options?: { default?: unknown } }
+      ).options?.default;
 
       if (declared !== undefined) {
         // Array defaults are stored as a factory, so each document gets its
         // own array rather than sharing one.
-        target[pathName] = typeof declared === 'function' ? (declared as () => unknown)() : declared;
+        target[pathName] =
+          typeof declared === 'function'
+            ? (declared as () => unknown)()
+            : declared;
       } else if (schemaType.instance === 'Array') {
         target[pathName] = [];
       }
@@ -47,11 +55,14 @@ export function fillDefaultsOnRead(schema: Schema): void {
 
   // Covers lean reads too: a post-find hook receives whatever the query
   // resolved to, plain objects included.
-  schema.post(['find', 'findOne', 'findOneAndUpdate'], function (result: unknown) {
-    if (Array.isArray(result)) {
-      result.forEach(fill);
-    } else {
-      fill(result);
-    }
-  });
+  schema.post(
+    ['find', 'findOne', 'findOneAndUpdate'],
+    function (result: unknown) {
+      if (Array.isArray(result)) {
+        result.forEach(fill);
+      } else {
+        fill(result);
+      }
+    },
+  );
 }

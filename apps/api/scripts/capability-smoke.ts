@@ -15,7 +15,7 @@ import { NestFactory } from '@nestjs/core';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Actor } from '@repo/contracts';
 import type { Connection } from 'mongoose';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 
 import { AppModule } from '../src/app.module';
 import { CapabilityRegistry } from '../src/capabilities/capability-registry.service';
@@ -46,7 +46,25 @@ function expect(what: string, ok: boolean): void {
   console.log(`${ok ? '  ok  ' : '  FAIL'} ${what}`);
 }
 
+/**
+ * Start from nothing.
+ *
+ * Done before Nest boots, not after: dropping the database once Mongoose has
+ * compiled its models would take the unique indexes with it -- including the
+ * `{ scheduleId, scheduledFor }` one that makes dose materialisation
+ * idempotent -- and the run would no longer be testing what production does.
+ */
+async function resetDatabase(uri: string): Promise<void> {
+  const connection = await mongoose.createConnection(uri).asPromise();
+  await connection.dropDatabase();
+  await connection.close();
+}
+
 async function main() {
+  // A run that fails partway would otherwise poison every run after it, which
+  // is how a test suite quietly stops meaning anything.
+  await resetDatabase(process.env.MONGODB_URI!);
+
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });
   const registry = app.get(CapabilityRegistry);
   const connection = app.get<Connection>(getConnectionToken());
