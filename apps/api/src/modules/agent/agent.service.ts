@@ -3,7 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { HumanMessage } from '@langchain/core/messages';
 import { Command } from '@langchain/langgraph';
 import { DEFAULT_SESSION_TITLE } from '@repo/contracts';
-import type { Actor, ResumeAgentInput, RunAgentInput } from '@repo/contracts';
+import type {
+  Actor,
+  AgentFile,
+  AgentTodo,
+  PendingApproval,
+  ResumeAgentInput,
+  RunAgentInput,
+  SessionState,
+  TranscriptToolCall,
+  TranscriptTurn,
+} from '@repo/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { CapabilityRegistry } from '../../capabilities/capability-registry.service';
@@ -63,24 +73,27 @@ export class AgentService {
   }
 
   /**
-   * A conversation's turns.
+   * Everything needed to reopen a conversation as it was left.
    *
-   * Read back out of the checkpointer rather than a table of our own: the
-   * graph is what actually persisted them, and a second copy would be one
-   * more thing to keep in step for no gain.
+   * Read out of the graph rather than a table of our own: the checkpointer is
+   * what actually persisted it, and a second copy would be one more thing to
+   * keep in step. Returned in one call so the turns, the workspace and any
+   * unanswered approval cannot disagree with each other.
    */
-  async messages(actor: Actor, sessionId: string) {
+  async state(actor: Actor, sessionId: string): Promise<SessionState> {
     // Proves the session is the caller's before any graph state is touched.
-    await this.sessions.get(actor, { id: sessionId });
+    const session = await this.sessions.get(actor, { id: sessionId });
 
     const agent = this.agents.build(actor, this.confirmsWrites);
-    const state = await readGraphState(agent, sessionId);
+    const snapshot = await readGraphState(agent, sessionId);
 
-    const items = (state.values?.messages ?? [])
-      .map(toTurn)
-      .filter((turn): turn is Turn => turn !== null);
-
-    return { items, total: items.length };
+    return {
+      session,
+      messages: normalizeTurns(snapshot.values?.messages ?? []),
+      files: toFiles(snapshot.values?.files),
+      todos: toTodos(snapshot.values?.todos),
+      pendingApproval: firstPendingApproval(snapshot.tasks),
+    };
   }
 
   run(actor: Actor, input: RunAgentInput): AsyncGenerator<AguiEvent> {
@@ -218,7 +231,7 @@ export class AgentService {
 async function readGraphState(
   agent: { getState: (config: unknown) => unknown },
   threadId: string,
-): Promise<{ values?: { messages?: StoredMessage[] } }> {
+): Promise<GraphSnapshot> {
   const snapshot: unknown = await Promise.resolve(
     agent.getState({ configurable: { thread_id: threadId } }),
   );
@@ -241,44 +254,147 @@ interface StoredMessage {
   id?: string;
   tool_calls?: Array<{ id?: string; name?: string; args?: unknown }>;
   tool_call_id?: string;
+  status?: string;
 }
 
-export interface Turn {
-  id: string;
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  toolCalls: Array<{ id: string; name: string; args: unknown }>;
-  toolCallId: string | null;
+interface GraphSnapshot {
+  values?: { messages?: StoredMessage[]; files?: unknown; todos?: unknown };
+  tasks?: PendingTask[];
 }
 
-/** LangChain message classes name their kind through `getType()`. */
-function toTurn(message: StoredMessage): Turn | null {
-  const kind = message.getType?.() ?? message._getType?.() ?? '';
-  const role =
-    kind === 'human'
-      ? 'user'
-      : kind === 'ai'
-        ? 'assistant'
-        : kind === 'tool'
-          ? 'tool'
-          : null;
-  if (!role) {
-    // System prompts and anything else internal are not part of the
-    // conversation as the user experienced it.
-    return null;
+/**
+ * Fold the graph's raw message list into the transcript a person saw.
+ *
+ * Two things have to happen, and both are easy to miss:
+ *
+ * A tool result is a separate `tool` message referring back to a call by id.
+ * It is folded onto the call so a client renders one row instead of
+ * re-pairing them itself.
+ *
+ * One agent turn is routinely several AIMessages -- one deciding to call a
+ * tool, with no text, then another with the answer once the result returns --
+ * while the live stream shows a single reply. Without merging consecutive
+ * assistant messages, reopening a conversation would split one reply into
+ * bubbles that never appeared while it was happening.
+ */
+export function normalizeTurns(raw: StoredMessage[]): TranscriptTurn[] {
+  const turns: TranscriptTurn[] = [];
+  const callsById = new Map<string, TranscriptToolCall>();
+
+  for (const message of raw) {
+    const kind = message.getType?.() ?? message._getType?.() ?? '';
+
+    if (kind === 'tool') {
+      const call = message.tool_call_id
+        ? callsById.get(message.tool_call_id)
+        : undefined;
+      if (call) {
+        call.result = textOf(message.content);
+        call.isError = message.status === 'error';
+      }
+      continue;
+    }
+    // System prompts are not part of the conversation as it was experienced.
+    if (kind !== 'human' && kind !== 'ai') {
+      continue;
+    }
+
+    const role = kind === 'human' ? 'user' : 'assistant';
+    const content = textOf(message.content);
+    const toolCalls = (message.tool_calls ?? []).map((call) => {
+      const entry: TranscriptToolCall = {
+        toolCallId: call.id ?? randomUUID(),
+        toolName: fromToolName(call.name ?? ''),
+        args: (call.args ?? {}) as Record<string, unknown>,
+        result: null,
+        isError: false,
+      };
+      callsById.set(entry.toolCallId, entry);
+      return entry;
+    });
+
+    const previous = turns.at(-1);
+    if (role === 'assistant' && previous?.role === 'assistant') {
+      // Concatenated with no separator, matching how the live stream builds
+      // the text: deltas appended, with no notion of message boundaries.
+      previous.content += content;
+      previous.toolCalls.push(...toolCalls);
+      continue;
+    }
+
+    turns.push({
+      id: message.id ?? `${kind}-${turns.length}`,
+      role,
+      content,
+      toolCalls,
+    });
   }
 
-  return {
-    id: message.id ?? randomUUID(),
-    role,
-    content: textOf(message.content),
-    toolCalls: (message.tool_calls ?? []).map((call) => ({
-      id: call.id ?? randomUUID(),
-      name: fromToolName(call.name ?? ''),
-      args: call.args ?? {},
-    })),
-    toolCallId: message.tool_call_id ?? null,
-  };
+  return turns;
+}
+
+/** The agent's workspace, minus directories and its own skill files. */
+function toFiles(raw: unknown): AgentFile[] {
+  if (!raw || typeof raw !== 'object') {
+    return [];
+  }
+  const files: AgentFile[] = [];
+
+  for (const [path, data] of Object.entries(raw as Record<string, unknown>)) {
+    if (path.startsWith('/skills/') || path.endsWith('/')) {
+      continue;
+    }
+    const entry = data as {
+      content?: unknown;
+      is_dir?: boolean;
+      isDir?: boolean;
+    };
+    if (entry?.is_dir === true || entry?.isDir === true) {
+      continue;
+    }
+    const content = textOf(entry?.content);
+    files.push({ path, content, size: content.length });
+  }
+
+  return files;
+}
+
+function toTodos(raw: unknown): AgentTodo[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map((todo: { content?: unknown; status?: unknown }) => ({
+    content: typeof todo?.content === 'string' ? todo.content : '',
+    status: typeof todo?.status === 'string' ? todo.status : 'pending',
+  }));
+}
+
+/**
+ * The write the graph stopped on, if it is still waiting.
+ *
+ * Read on load as well as during a run: an approval the user never answered
+ * has to survive closing the app, or the conversation is stuck with no way
+ * to see why.
+ */
+function firstPendingApproval(
+  tasks: PendingTask[] | undefined,
+): PendingApproval | null {
+  for (const task of tasks ?? []) {
+    for (const interrupt of task.interrupts ?? []) {
+      const request =
+        interrupt.value?.action_requests?.[0] ?? interrupt.value ?? {};
+      const toolCallId = asText(request.tool_call_id);
+      const toolName = asText(request.action) ?? asText(request.name);
+      if (toolCallId && toolName) {
+        return {
+          toolCallId,
+          toolName: fromToolName(toolName),
+          args: (request.args ?? {}) as Record<string, unknown>,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 interface PendingTask {

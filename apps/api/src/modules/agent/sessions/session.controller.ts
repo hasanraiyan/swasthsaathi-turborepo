@@ -52,10 +52,10 @@ export class SessionController {
     return this.sessions.get(actor, parseInput(byIdSchema, { id }));
   }
 
-  /** Turns come from the graph's own state, not a table of our own. */
+  /** The whole conversation as it was left: turns, files, todos, pending approval. */
   @Get(':id/messages')
   messages(@CurrentActor() actor: Actor, @Param('id') id: string) {
-    return this.agent.messages(actor, parseInput(byIdSchema, { id }).id);
+    return this.agent.state(actor, parseInput(byIdSchema, { id }).id);
   }
 
   @Patch(':id/title')

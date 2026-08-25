@@ -153,6 +153,69 @@ export const resumeAgentSchema = z.object({
 });
 export type ResumeAgentInput = z.infer<typeof resumeAgentSchema>;
 
+// --- loading a conversation ----------------------------------------------
+
+/**
+ * A tool call as the transcript shows it, with its result folded in.
+ *
+ * The graph stores the call and its result as two separate messages. Keeping
+ * them apart would make every client re-pair them by id to render one row.
+ */
+export const transcriptToolCallSchema = z.object({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: z.record(z.string(), z.unknown()),
+  result: z.string().nullable(),
+  isError: z.boolean(),
+});
+export type TranscriptToolCall = z.infer<typeof transcriptToolCallSchema>;
+
+export const transcriptTurnSchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  toolCalls: z.array(transcriptToolCallSchema),
+});
+export type TranscriptTurn = z.infer<typeof transcriptTurnSchema>;
+
+/** A file in the agent's workspace. */
+export const agentFileSchema = z.object({
+  path: z.string(),
+  content: z.string(),
+  size: z.number().int().min(0),
+});
+export type AgentFile = z.infer<typeof agentFileSchema>;
+
+export const agentTodoSchema = z.object({
+  content: z.string(),
+  status: z.string(),
+});
+export type AgentTodo = z.infer<typeof agentTodoSchema>;
+
+/** A write the agent stopped on, still waiting for an answer. */
+export const pendingApprovalSchema = z.object({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: z.record(z.string(), z.unknown()),
+});
+export type PendingApproval = z.infer<typeof pendingApprovalSchema>;
+
+/**
+ * Everything needed to reopen a conversation exactly as it was left.
+ *
+ * One read rather than several: a client restoring a session needs the turns,
+ * the workspace and any unanswered approval together, and fetching them
+ * separately would let them disagree.
+ */
+export const sessionStateSchema = z.object({
+  session: chatSessionSchema,
+  messages: z.array(transcriptTurnSchema),
+  files: z.array(agentFileSchema),
+  todos: z.array(agentTodoSchema),
+  pendingApproval: pendingApprovalSchema.nullable(),
+});
+export type SessionState = z.infer<typeof sessionStateSchema>;
+
 /** What `GET /api/agent` reports. */
 export const agentInfoSchema = z.object({
   protocol: z.literal('ag-ui'),
