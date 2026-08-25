@@ -3,13 +3,14 @@ import type { MedicationDoseWithMedicine } from '@repo/contracts';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
-import { Screen } from '../../components/ui/Screen';
-import { EmptyState, ErrorNotice, Loading } from '../../components/ui/States';
-import { StatusPill } from '../../components/ui/StatusPill';
-import { useDay, useRecordDose } from '../../lib/queries';
-import { colors, radii, spacing, statusColors, type } from '../../theme';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Screen } from '../components/ui/Screen';
+import { EmptyState, ErrorNotice, Loading } from '../components/ui/States';
+import { StatusPill } from '../components/ui/StatusPill';
+import { clockTime, formatDose } from '../lib/format';
+import { useDay, useRecordDose } from '../lib/queries';
+import { colors, radii, spacing, statusColors, type } from '../theme';
 
 /**
  * Today: the one screen a user opens every day.
@@ -29,6 +30,7 @@ export default function TodayScreen() {
     <Screen
       title={greeting}
       subtitle={longDate()}
+      menu
       onRefresh={() => void day.refetch()}
       refreshing={day.isRefetching}
     >
@@ -130,16 +132,6 @@ function longDate(): string {
     day: 'numeric',
     month: 'long',
   });
-}
-
-function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatDose(amount: number, unit: string): string {
-  // "1 tablet", "2 tablets", "5 ml" -- units that aren't countable stay as-is.
-  const plural = amount === 1 || unit.endsWith('s') || unit === 'ml' ? unit : `${unit}s`;
-  return `${amount} ${plural}`;
 }
 
 const styles = StyleSheet.create({

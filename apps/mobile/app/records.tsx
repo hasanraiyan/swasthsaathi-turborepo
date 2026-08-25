@@ -2,16 +2,16 @@ import Feather from '@expo/vector-icons/Feather';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card } from '../../components/ui/Card';
-import { Screen } from '../../components/ui/Screen';
+import { Card } from '../components/ui/Card';
+import { Screen } from '../components/ui/Screen';
 import {
   useAppointments,
   useConditions,
   useDoctors,
   useMeasurements,
   useSymptoms,
-} from '../../lib/queries';
-import { colors, spacing, type } from '../../theme';
+} from '../lib/queries';
+import { colors, spacing, type } from '../theme';
 
 /**
  * The rest of the health record.
@@ -40,6 +40,7 @@ export default function RecordsScreen() {
     <Screen
       title="Records"
       subtitle="Everything else in your health journey"
+      menu
       onRefresh={refreshAll}
       refreshing={conditions.isRefetching}
     >

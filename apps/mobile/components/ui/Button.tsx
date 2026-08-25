@@ -10,6 +10,8 @@ interface ButtonProps {
   loading?: boolean;
   /** Destructive intent: stopping a medicine, deleting a record. */
   tone?: 'default' | 'danger';
+  /** `small` is for actions sitting inside a card, not a screen footer. */
+  size?: 'default' | 'small';
 }
 
 export function Button({
@@ -19,6 +21,7 @@ export function Button({
   disabled = false,
   loading = false,
   tone = 'default',
+  size = 'default',
 }: ButtonProps) {
   const inactive = disabled || loading;
   const accent = tone === 'danger' ? colors.brick : colors.pine;
@@ -31,6 +34,7 @@ export function Button({
       disabled={inactive}
       style={({ pressed }) => [
         styles.base,
+        size === 'small' && styles.small,
         variant === 'primary' && { backgroundColor: accent },
         variant === 'outline' && { borderWidth: 1.5, borderColor: accent },
         variant === 'ghost' && styles.ghost,
@@ -44,6 +48,7 @@ export function Button({
         <Text
           style={[
             styles.label,
+            size === 'small' && styles.labelSmall,
             { color: variant === 'primary' ? colors.cream : accent },
           ]}
         >
@@ -62,8 +67,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
+  small: { minHeight: 40, borderRadius: 20, paddingHorizontal: spacing.md },
   ghost: { minHeight: 40 },
   pressed: { opacity: 0.75 },
   inactive: { opacity: 0.45 },
   label: { ...type.body, fontWeight: '600' },
+  labelSmall: { ...type.caption, fontWeight: '600' },
 });

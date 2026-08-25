@@ -24,6 +24,7 @@ export default function MedicinesScreen() {
     <Screen
       title="Medicines"
       subtitle="What you take, and what it's for"
+      menu
       onRefresh={() => void medicines.refetch()}
       refreshing={medicines.isRefetching}
       footer={<Button label="Add medicine" onPress={() => router.push('/medicines/new')} />}

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { humanize } from '../../lib/format';
 import { colors, radii, spacing, type } from '../../theme';
 
 interface ChipGroupProps<T extends string> {
@@ -51,11 +52,6 @@ export function ChipGroup<T extends string>({
       </View>
     </View>
   );
-}
-
-export function humanize(value: string): string {
-  const spaced = value.replace(/_/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 const styles = StyleSheet.create({

@@ -5,7 +5,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '../../components/ui/Button';
 import { Card, CardMeta, CardTitle } from '../../components/ui/Card';
-import { ChipGroup, humanize } from '../../components/ui/ChipGroup';
+import { ChipGroup } from '../../components/ui/ChipGroup';
+import { humanize } from '../../lib/format';
 import { Field } from '../../components/ui/Field';
 import { Screen } from '../../components/ui/Screen';
 import { EmptyState, ErrorNotice, Loading } from '../../components/ui/States';

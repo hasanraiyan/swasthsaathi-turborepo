@@ -4,15 +4,15 @@ import type { BloodGroup, Profile } from '@repo/contracts';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '../../components/ui/Button';
-import { SectionHeader } from '../../components/ui/Card';
-import { ChipGroup } from '../../components/ui/ChipGroup';
-import { Field } from '../../components/ui/Field';
-import { Screen } from '../../components/ui/Screen';
-import { ErrorNotice, Loading } from '../../components/ui/States';
-import { useAdherence } from '../../lib/adherence';
-import { useProfile, useUpdateProfile } from '../../lib/queries';
-import { colors, spacing, type } from '../../theme';
+import { Button } from '../components/ui/Button';
+import { SectionHeader } from '../components/ui/Card';
+import { ChipGroup } from '../components/ui/ChipGroup';
+import { Field } from '../components/ui/Field';
+import { Screen } from '../components/ui/Screen';
+import { ErrorNotice, Loading } from '../components/ui/States';
+import { useAdherence } from '../lib/adherence';
+import { useProfile, useUpdateProfile } from '../lib/queries';
+import { colors, spacing, type } from '../theme';
 
 /**
  * The user's own details, plus how they've been doing.
@@ -30,6 +30,7 @@ export default function ProfileScreen() {
     <Screen
       title="Profile"
       subtitle={user?.primaryEmailAddress?.emailAddress ?? undefined}
+      menu
       onRefresh={() => void profile.refetch()}
       refreshing={profile.isRefetching}
     >

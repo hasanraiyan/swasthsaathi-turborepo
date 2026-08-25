@@ -13,6 +13,9 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AppDrawer } from '../components/nav/AppDrawer';
+import { ChatProvider } from '../lib/chat-store';
+import { DrawerProvider } from '../lib/navigation';
 import { clerkAppearance, colors } from '../theme';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -60,12 +63,20 @@ export default function RootLayout() {
         appearance={clerkAppearance}
       >
         <QueryClientProvider client={queryClient}>
-          <ClerkLoading>
-            <Splash />
-          </ClerkLoading>
-          <ClerkLoaded>
-            <AuthGate />
-          </ClerkLoaded>
+          {/* Above the route tree, so a conversation and the drawer's state
+              both survive moving between sections. */}
+          <ChatProvider>
+            <DrawerProvider>
+              <ClerkLoading>
+                <Splash />
+              </ClerkLoading>
+              <ClerkLoaded>
+                <AuthGate />
+                {/* One drawer for the whole app, over every screen. */}
+                <AppDrawer />
+              </ClerkLoaded>
+            </DrawerProvider>
+          </ChatProvider>
           <StatusBar style="dark" />
         </QueryClientProvider>
       </ClerkProvider>
@@ -76,7 +87,7 @@ export default function RootLayout() {
 /**
  * Keeps the route tree and the session in step.
  *
- * Both directions matter: a signed-out user must never land inside the tabs,
+ * Both directions matter: a signed-out user must never land inside the app,
  * and a user who has just signed in must not be left staring at the sign-in
  * screen.
  */
@@ -107,8 +118,17 @@ function AuthGate() {
         contentStyle: { backgroundColor: colors.cream },
       }}
     >
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      {/* Primary sections. Each renders its own top bar with the menu button,
+          so the stack header is off. */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="today" options={{ headerShown: false }} />
+      <Stack.Screen name="medicines/index" options={{ headerShown: false }} />
+      <Stack.Screen name="records" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+
+      {/* Sub-pages reached from a section. These keep the stack header, so the
+          way back out is a back arrow rather than the drawer. */}
       <Stack.Screen name="medicines/new" options={{ title: 'Add medicine' }} />
       <Stack.Screen name="medicines/[id]" options={{ title: 'Medicine' }} />
       <Stack.Screen name="conditions/index" options={{ title: 'Conditions' }} />
