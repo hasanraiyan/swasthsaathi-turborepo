@@ -1,6 +1,7 @@
 export * from './common';
 export * from './profile';
 export * from './prevention';
+export * from './agent';
 export * from './conditions';
 export * from './doctors';
 export * from './medicines';

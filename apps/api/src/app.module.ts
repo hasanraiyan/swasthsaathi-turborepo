@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CapabilitiesModule } from './capabilities/capabilities.module';
 import { DatabaseModule } from './database/database.module';
+import { AgentModule } from './modules/agent/agent.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { ConditionsModule } from './modules/conditions/conditions.module';
 import { DoctorsModule } from './modules/doctors/doctors.module';
@@ -37,6 +38,7 @@ import { SymptomsModule } from './modules/symptoms/symptoms.module';
     SymptomsModule,
     MeasurementsModule,
     DocumentsModule,
+    AgentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

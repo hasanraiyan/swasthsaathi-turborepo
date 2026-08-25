@@ -3,6 +3,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { ReferenceValidator } from './reference-validator';
+import { AgentMemory, AgentMemorySchema } from './schemas/agent-memory.schema';
+import { ChatMessage, ChatMessageSchema } from './schemas/chat-message.schema';
+import { ChatSession, ChatSessionSchema } from './schemas/chat-session.schema';
 import { fillDefaultsOnRead } from './schemas/fill-defaults-on-read';
 import { Appointment, AppointmentSchema } from './schemas/appointment.schema';
 import { Condition, ConditionSchema } from './schemas/condition.schema';
@@ -45,6 +48,9 @@ SymptomEntrySchema.plugin(fillDefaultsOnRead);
 MeasurementSchema.plugin(fillDefaultsOnRead);
 HealthDocumentSchema.plugin(fillDefaultsOnRead);
 PreventiveCheckLogSchema.plugin(fillDefaultsOnRead);
+ChatSessionSchema.plugin(fillDefaultsOnRead);
+ChatMessageSchema.plugin(fillDefaultsOnRead);
+AgentMemorySchema.plugin(fillDefaultsOnRead);
 
 const registrations = [
   { name: Profile.name, schema: ProfileSchema },
@@ -58,6 +64,9 @@ const registrations = [
   { name: Measurement.name, schema: MeasurementSchema },
   { name: HealthDocument.name, schema: HealthDocumentSchema },
   { name: PreventiveCheckLog.name, schema: PreventiveCheckLogSchema },
+  { name: ChatSession.name, schema: ChatSessionSchema },
+  { name: ChatMessage.name, schema: ChatMessageSchema },
+  { name: AgentMemory.name, schema: AgentMemorySchema },
 ];
 
 const models = MongooseModule.forFeature(registrations);
