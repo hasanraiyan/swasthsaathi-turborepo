@@ -11,6 +11,7 @@ import { DoctorsModule } from './modules/doctors/doctors.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { MeasurementsModule } from './modules/measurements/measurements.module';
 import { MedicinesModule } from './modules/medicines/medicines.module';
+import { PreventionModule } from './modules/prevention/prevention.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { SymptomsModule } from './modules/symptoms/symptoms.module';
 
@@ -28,6 +29,7 @@ import { SymptomsModule } from './modules/symptoms/symptoms.module';
     DatabaseModule,
     CapabilitiesModule,
     ProfileModule,
+    PreventionModule,
     ConditionsModule,
     DoctorsModule,
     MedicinesModule,

@@ -41,6 +41,43 @@ export function atTimeOfDay(dateOnly: string, timeOfDay: string): Date {
   return date;
 }
 
+/**
+ * Add whole months, clamping to the end of a shorter month so 31 Jan plus one
+ * month is 28 Feb rather than spilling into March.
+ */
+export function addMonths(dateOnly: string, months: number): string {
+  const [year, month, day] = dateOnly.split('-').map(Number);
+  const target = new Date(year, (month ?? 1) - 1 + months, 1);
+  const lastDay = new Date(
+    target.getFullYear(),
+    target.getMonth() + 1,
+    0,
+  ).getDate();
+  target.setDate(Math.min(day ?? 1, lastDay));
+  return toDateOnly(target);
+}
+
+/** Whole days from `from` to `to`; negative when `to` is earlier. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round(
+    (startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_PER_DAY,
+  );
+}
+
+/** Completed years between a date of birth and today. */
+export function yearsSince(dateOnly: string): number {
+  const birth = startOfDay(dateOnly);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < birth.getMonth() ||
+    (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate());
+  if (beforeBirthday) {
+    age -= 1;
+  }
+  return age;
+}
+
 export function addDays(dateOnly: string, days: number): string {
   return toDateOnly(
     new Date(startOfDay(dateOnly).getTime() + days * MS_PER_DAY),

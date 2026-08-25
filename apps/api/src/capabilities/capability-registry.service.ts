@@ -94,7 +94,9 @@ export class CapabilityRegistry implements OnModuleInit {
   async invoke(
     name: string,
     actor: Actor,
-    rawInput: unknown,
+    // Optional: a read like `prevention.plan` takes no input, and making the
+    // caller pass `{}` to say so is noise.
+    rawInput?: unknown,
   ): Promise<unknown> {
     const binding = this.bindings.get(name);
     if (!binding) {

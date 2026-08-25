@@ -1,6 +1,20 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { BLOOD_GROUP, SEX_AT_BIRTH } from '@repo/contracts';
-import type { BloodGroup, SexAtBirth } from '@repo/contracts';
+import {
+  ACTIVITY_LEVEL,
+  ALCOHOL_USE,
+  BLOOD_GROUP,
+  FAMILY_HISTORY,
+  SEX_AT_BIRTH,
+  TOBACCO_USE,
+} from '@repo/contracts';
+import type {
+  ActivityLevel,
+  AlcoholUse,
+  BloodGroup,
+  FamilyHistoryItem,
+  SexAtBirth,
+  TobaccoUse,
+} from '@repo/contracts';
 import type { HydratedDocument } from 'mongoose';
 
 import { DATE_ONLY_MATCH, ownedSchemaOptions } from './schema-options';
@@ -34,6 +48,21 @@ export class Profile {
 
   @Prop({ type: [String], default: [] })
   allergies!: string[];
+
+  // The health baseline. Null means "not answered yet", which is different
+  // from `never` -- the plan treats an unanswered habit as unknown rather
+  // than assuming the healthiest option.
+  @Prop({ type: String, enum: [...TOBACCO_USE], default: null })
+  tobaccoUse!: TobaccoUse | null;
+
+  @Prop({ type: String, enum: [...ALCOHOL_USE], default: null })
+  alcoholUse!: AlcoholUse | null;
+
+  @Prop({ type: String, enum: [...ACTIVITY_LEVEL], default: null })
+  activityLevel!: ActivityLevel | null;
+
+  @Prop({ type: [String], enum: [...FAMILY_HISTORY], default: [] })
+  familyHistory!: FamilyHistoryItem[];
 
   @Prop({ type: String, default: null })
   emergencyContactName!: string | null;

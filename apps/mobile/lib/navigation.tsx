@@ -18,6 +18,7 @@ export interface NavSection {
 export const NAV_SECTIONS: NavSection[] = [
   { href: '/', label: 'Chat', icon: 'message-circle' },
   { href: '/today', label: 'Today', icon: 'sun' },
+  { href: '/checks', label: 'Staying well', icon: 'shield' },
   { href: '/medicines', label: 'Medicines', icon: 'thermometer' },
   { href: '/records', label: 'Records', icon: 'folder' },
   { href: '/profile', label: 'Profile', icon: 'user' },

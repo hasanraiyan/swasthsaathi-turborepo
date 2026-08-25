@@ -20,6 +20,10 @@ import {
   MedicationScheduleSchema,
 } from './schemas/medication-schedule.schema';
 import { Medicine, MedicineSchema } from './schemas/medicine.schema';
+import {
+  PreventiveCheckLog,
+  PreventiveCheckLogSchema,
+} from './schemas/preventive-check-log.schema';
 import { Profile, ProfileSchema } from './schemas/profile.schema';
 import {
   SymptomEntry,
@@ -37,6 +41,7 @@ const models = MongooseModule.forFeature([
   { name: SymptomEntry.name, schema: SymptomEntrySchema },
   { name: Measurement.name, schema: MeasurementSchema },
   { name: HealthDocument.name, schema: HealthDocumentSchema },
+  { name: PreventiveCheckLog.name, schema: PreventiveCheckLogSchema },
 ]);
 
 /**

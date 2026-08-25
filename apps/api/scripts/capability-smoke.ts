@@ -35,6 +35,15 @@ function show(label: string, value: unknown): void {
   console.log(JSON.stringify(value, null, 2).slice(0, 900));
 }
 
+let failures = 0;
+
+function expect(what: string, ok: boolean): void {
+  if (!ok) {
+    failures += 1;
+  }
+  console.log(`${ok ? '  ok  ' : '  FAIL'} ${what}`);
+}
+
 async function main() {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error'] });
   const registry = app.get(CapabilityRegistry);
@@ -92,6 +101,95 @@ async function main() {
   show('medicationDoses.adherence', await registry.invoke('medicationDoses.adherence', actor, {}));
   show('medicines.get (with schedules)', await registry.invoke('medicines.get', actor, { id: medicine.id }));
 
+  // --- preventive care ----------------------------------------------------
+  // A 46-year-old woman who uses tobacco daily, is sedentary, has a raised
+  // BMI and diabetes on record: enough to exercise age, sex, body, habit,
+  // family-history and condition-driven rules at once.
+  await registry.invoke('profile.update', actor, {
+    fullName: 'Smoke Test',
+    dateOfBirth: '1980-05-10',
+    sexAtBirth: 'female',
+    heightCm: 158,
+    weightKg: 68,
+    tobaccoUse: 'daily',
+    alcoholUse: 'never',
+    activityLevel: 'sedentary',
+    familyHistory: ['diabetes', 'heart_disease'],
+  });
+
+  const snapshot = (await registry.invoke('prevention.snapshot', actor)) as {
+    age: number;
+    bmi: number;
+    bmiBand: string;
+    baselineComplete: boolean;
+    riskFlags: { key: string }[];
+  };
+  show('prevention.snapshot', snapshot);
+  expect('baseline is complete', snapshot.baselineComplete === true);
+  expect('BMI banded on Asian-Indian cut-offs', snapshot.bmiBand === 'overweight');
+  expect(
+    'risk flags name tobacco, activity and family history',
+    ['tobacco', 'activity', 'family', 'bmi', 'age'].every((key) =>
+      snapshot.riskFlags.some((flag) => flag.key === key),
+    ),
+  );
+
+  const plan = (await registry.invoke('prevention.plan', actor)) as {
+    checks: { key: string; status: string; everyMonths: number; appliesBecause: string }[];
+    dueCount: number;
+  };
+  console.log('\n=== prevention.plan ===');
+  for (const check of plan.checks) {
+    console.log(
+      `  ${check.status.padEnd(11)} ${check.key.padEnd(26)} every ${String(check.everyMonths).padStart(2)}mo  (${check.appliesBecause})`,
+    );
+  }
+
+  const keys = plan.checks.map((check) => check.key);
+  expect('sex-specific screening applies', keys.includes('cervical_cancer_screening'));
+  expect('anaemia screening applies to a woman of 46', keys.includes('haemoglobin'));
+  expect('tobacco drives oral cancer screening', keys.includes('oral_cancer_screening'));
+  expect('a condition on record adds its own check', keys.includes('diabetic_eye_exam'));
+  expect(
+    'diabetes tightens the sugar interval to 3 months',
+    plan.checks.find((check) => check.key === 'blood_glucose')?.everyMonths === 3,
+  );
+  expect('nothing done yet, so everything is due', plan.dueCount === plan.checks.length);
+
+  await registry.invoke('prevention.complete', actor, {
+    checkKey: 'blood_pressure',
+    note: '128/82',
+  });
+
+  const replanned = (await registry.invoke('prevention.plan', actor)) as {
+    checks: { key: string; status: string; dueOn: string; lastCompletedOn: string | null }[];
+  };
+  const bp = replanned.checks.find((check) => check.key === 'blood_pressure');
+  show('blood pressure after completing it', bp);
+  expect('completing a check moves it off the due list', bp?.status === 'up_to_date');
+  expect('and schedules the next one a year out', bp?.dueOn.startsWith(`${new Date().getFullYear() + 1}`) === true);
+
+  // A man gets a different plan from the same engine.
+  const man: Actor = { userId: 'user_smoke_male' };
+  await registry.invoke('profile.update', man, {
+    dateOfBirth: '1995-01-01',
+    sexAtBirth: 'male',
+    heightCm: 175,
+    weightKg: 70,
+    tobaccoUse: 'never',
+    alcoholUse: 'never',
+    activityLevel: 'active',
+    familyHistory: [],
+  });
+  const youngPlan = (await registry.invoke('prevention.plan', man)) as {
+    checks: { key: string }[];
+  };
+  const youngKeys = youngPlan.checks.map((check) => check.key);
+  console.log(`\nhealthy 31-year-old man gets: ${youngKeys.join(', ')}`);
+  expect('no cervical screening for a man', !youngKeys.includes('cervical_cancer_screening'));
+  expect('no tobacco checks for a non-user', !youngKeys.includes('oral_cancer_screening'));
+  expect('but still has preventive checks to do', youngKeys.length >= 4);
+
   // Ownership check: a different user must not see any of it.
   const intruder: Actor = { userId: 'user_intruder' };
   try {
@@ -125,6 +223,11 @@ async function main() {
   await connection.db?.dropDatabase();
   console.log('\nsmoke database dropped');
   await app.close();
+
+  if (failures > 0) {
+    console.error(`\n${failures} check(s) failed`);
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {

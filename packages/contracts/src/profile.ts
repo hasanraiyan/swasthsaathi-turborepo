@@ -5,8 +5,52 @@ import { capability, dateOnlySchema, notesSchema, recordMetaShape } from './comm
 export const SEX_AT_BIRTH = ['male', 'female', 'other', 'prefer_not_to_say'] as const;
 export const BLOOD_GROUP = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
+/**
+ * The health baseline: the handful of facts that decide which preventive
+ * checks a person actually needs.
+ *
+ * Nothing in the product can be preventive without these -- a screening
+ * schedule is a function of age, sex, body, habits and family history, and
+ * with none of them recorded every user would get the same generic list.
+ */
+export const TOBACCO_USE = ['never', 'former', 'occasional', 'daily'] as const;
+export const ALCOHOL_USE = ['never', 'occasional', 'regular'] as const;
+export const ACTIVITY_LEVEL = ['sedentary', 'light', 'moderate', 'active'] as const;
+
+/** Conditions in a close blood relative that change what to screen for. */
+export const FAMILY_HISTORY = [
+  'diabetes',
+  'hypertension',
+  'heart_disease',
+  'stroke',
+  'cancer',
+  'kidney_disease',
+  'thyroid',
+  'tuberculosis',
+  'mental_health',
+] as const;
+
 export type SexAtBirth = (typeof SEX_AT_BIRTH)[number];
 export type BloodGroup = (typeof BLOOD_GROUP)[number];
+export type TobaccoUse = (typeof TOBACCO_USE)[number];
+export type AlcoholUse = (typeof ALCOHOL_USE)[number];
+export type ActivityLevel = (typeof ACTIVITY_LEVEL)[number];
+export type FamilyHistoryItem = (typeof FAMILY_HISTORY)[number];
+
+/**
+ * What the baseline needs before a preventive plan can be personalised.
+ * Family history is deliberately not required -- "none that I know of" is a
+ * legitimate answer and an empty list already says it.
+ */
+export const REQUIRED_BASELINE_FIELDS = [
+  'dateOfBirth',
+  'sexAtBirth',
+  'heightCm',
+  'weightKg',
+  'tobaccoUse',
+  'alcoholUse',
+  'activityLevel',
+] as const;
 
 /**
  * The person using the app. One profile per Clerk user.
@@ -24,6 +68,10 @@ export const profileSchema = z.object({
   heightCm: z.number().positive().max(300).nullable(),
   weightKg: z.number().positive().max(700).nullable(),
   allergies: z.array(z.string().min(1).max(120)),
+  tobaccoUse: z.enum(TOBACCO_USE).nullable(),
+  alcoholUse: z.enum(ALCOHOL_USE).nullable(),
+  activityLevel: z.enum(ACTIVITY_LEVEL).nullable(),
+  familyHistory: z.array(z.enum(FAMILY_HISTORY)),
   emergencyContactName: z.string().max(200).nullable(),
   emergencyContactPhone: z.string().max(40).nullable(),
   notes: notesSchema.nullable(),
@@ -42,6 +90,20 @@ export const updateProfileSchema = z.object({
     .max(50)
     .optional()
     .describe('Known allergies, e.g. ["penicillin", "peanuts"]'),
+  tobaccoUse: z
+    .enum(TOBACCO_USE)
+    .nullish()
+    .describe('Includes cigarettes, bidi, gutkha, khaini and paan masala'),
+  alcoholUse: z.enum(ALCOHOL_USE).nullish(),
+  activityLevel: z
+    .enum(ACTIVITY_LEVEL)
+    .nullish()
+    .describe('Rough level of physical activity in a normal week'),
+  familyHistory: z
+    .array(z.enum(FAMILY_HISTORY))
+    .max(20)
+    .optional()
+    .describe('Conditions in a parent, sibling or child'),
   emergencyContactName: z.string().max(200).nullish(),
   emergencyContactPhone: z.string().max(40).nullish(),
   notes: notesSchema.nullish(),

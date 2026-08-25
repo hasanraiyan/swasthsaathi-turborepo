@@ -1,7 +1,10 @@
 import { useAuth } from '@clerk/expo';
 import type {
   Appointment,
+  CompleteCheckInput,
   Condition,
+  HealthSnapshot,
+  PreventivePlan,
   CreateAppointmentInput,
   CreateConditionInput,
   CreateDoctorInput,
@@ -47,6 +50,7 @@ export function useApi(): ApiClient {
  */
 export const keys = {
   profile: ['profile'] as const,
+  prevention: ['prevention'] as const,
   conditions: ['conditions'] as const,
   doctors: ['doctors'] as const,
   medicines: ['medicines'] as const,
@@ -71,7 +75,39 @@ export function useUpdateProfile(): UseMutationResult<Profile, Error, UpdateProf
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: UpdateProfileInput) => api.patch<Profile>('/profile', input),
-    onSuccess: (profile) => client.setQueryData(keys.profile, profile),
+    onSuccess: (profile) => {
+      client.setQueryData(keys.profile, profile);
+      // The preventive plan is derived from the baseline, so editing height,
+      // habits or family history changes which checks apply.
+      void client.invalidateQueries({ queryKey: keys.prevention });
+    },
+  });
+}
+
+// --- prevention ----------------------------------------------------------
+
+export function usePreventivePlan(): UseQueryResult<PreventivePlan> {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...keys.prevention, 'plan'],
+    queryFn: () => api.get<PreventivePlan>('/prevention/plan'),
+  });
+}
+
+export function useHealthSnapshot(): UseQueryResult<HealthSnapshot> {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...keys.prevention, 'snapshot'],
+    queryFn: () => api.get<HealthSnapshot>('/prevention/snapshot'),
+  });
+}
+
+export function useCompleteCheck(): UseMutationResult<unknown, Error, CompleteCheckInput> {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CompleteCheckInput) => api.post('/prevention/complete', input),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.prevention }),
   });
 }
 
@@ -174,7 +210,12 @@ export function useCreateCondition(): UseMutationResult<Condition, Error, Create
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateConditionInput) => api.post<Condition>('/conditions', input),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.conditions }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.conditions });
+      // A new condition can add checks of its own -- diabetes brings a yearly
+      // eye examination and a tighter blood-sugar interval.
+      void client.invalidateQueries({ queryKey: keys.prevention });
+    },
   });
 }
 

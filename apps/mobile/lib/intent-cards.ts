@@ -11,6 +11,7 @@ import {
   useDoctors,
   useMeasurements,
   useMedicines,
+  usePreventivePlan,
   useSymptoms,
 } from './queries';
 
@@ -84,8 +85,9 @@ export function useIntentCards(): {
   const doctors = useDoctors();
   const symptoms = useSymptoms();
   const measurements = useMeasurements();
+  const plan = usePreventivePlan();
 
-  const queries = [day, medicines, conditions, appointments, doctors, symptoms, measurements];
+  const queries = [day, medicines, conditions, appointments, doctors, symptoms, measurements, plan];
   const loading = queries.some((query) => query.isPending);
   // Only claim the record is unreachable when nothing at all came back --
   // one failed query should not blank the whole deck.
@@ -95,6 +97,44 @@ export function useIntentCards(): {
     // Doses lead the deck: they are the one thing here that is time-bound.
     const doseCards: DoseCard[] = [];
     const built: SummaryCard[] = [];
+
+    // --- prevention ------------------------------------------------------
+    // Ahead of the record reads: what someone should do to stay well matters
+    // more on an empty chat than a summary of what they already have.
+    if (plan.data) {
+      if (!plan.data.snapshot.baselineComplete) {
+        built.push({
+          kind: 'summary',
+          key: 'baseline',
+          icon: 'user-check',
+          section: 'Health baseline',
+          headline: 'Two minutes to set up',
+          detail: 'Your age, body and habits decide which checks you actually need.',
+          action: { kind: 'open', label: 'Set up my baseline', href: '/baseline' },
+          hasData: true,
+        });
+      }
+
+      const urgent = plan.data.checks.find(
+        (check) => check.status === 'overdue' || check.status === 'due',
+      );
+      if (urgent) {
+        const count = plan.data.overdueCount + plan.data.dueCount;
+        built.push({
+          kind: 'summary',
+          key: 'check',
+          icon: 'shield',
+          section: urgent.status === 'overdue' ? 'Overdue' : 'Worth doing',
+          headline: urgent.title,
+          detail:
+            count > 1
+              ? `${urgent.appliesBecause} · ${count - 1} other check${count === 2 ? '' : 's'} waiting`
+              : urgent.appliesBecause,
+          action: { kind: 'open', label: 'See my checks', href: '/checks' },
+          hasData: true,
+        });
+      }
+    }
 
     // --- today's doses ---------------------------------------------------
     if (day.data && day.data.totalCount > 0) {
@@ -359,6 +399,7 @@ export function useIntentCards(): {
     doctors.data,
     symptoms.data,
     measurements.data,
+    plan.data,
   ]);
 
   return {

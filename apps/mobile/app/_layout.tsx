@@ -122,6 +122,7 @@ function AuthGate() {
           so the stack header is off. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="today" options={{ headerShown: false }} />
+      <Stack.Screen name="checks" options={{ headerShown: false }} />
       <Stack.Screen name="medicines/index" options={{ headerShown: false }} />
       <Stack.Screen name="records" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
@@ -129,6 +130,7 @@ function AuthGate() {
 
       {/* Sub-pages reached from a section. These keep the stack header, so the
           way back out is a back arrow rather than the drawer. */}
+      <Stack.Screen name="baseline" options={{ title: 'Health baseline' }} />
       <Stack.Screen name="medicines/new" options={{ title: 'Add medicine' }} />
       <Stack.Screen name="medicines/[id]" options={{ title: 'Medicine' }} />
       <Stack.Screen name="conditions/index" options={{ title: 'Conditions' }} />
