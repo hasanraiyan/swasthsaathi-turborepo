@@ -30,31 +30,6 @@ export class ProfileService implements CapabilityProvider {
     @InjectModel(Profile.name) private readonly model: Model<Profile>,
   ) {}
 
-  /**
-   * Fill in fields a stored profile predates.
-   *
-   * Mongoose applies schema defaults on insert, never to documents already in
-   * the collection, so a profile written before `familyHistory` existed comes
-   * back with the key *missing* rather than empty. Every consumer -- the
-   * preventive plan, the app, a future agent tool -- is promised the shape in
-   * `profileSchema`, so it is made true here, at the one place profiles are
-   * read, rather than with a `?? []` at each use.
-   *
-   * This also removes the need for a backfill migration: the next save writes
-   * the real values anyway.
-   */
-  private toRecord(doc: unknown): ProfileRecord {
-    const record = serialize<ProfileRecord>(doc);
-    return {
-      ...record,
-      allergies: record.allergies ?? [],
-      familyHistory: record.familyHistory ?? [],
-      tobaccoUse: record.tobaccoUse ?? null,
-      alcoholUse: record.alcoholUse ?? null,
-      activityLevel: record.activityLevel ?? null,
-    };
-  }
-
   capabilities(): CapabilityBinding[] {
     return [
       bindCapability(profileCapabilities.get, (actor) => this.get(actor)),
@@ -73,7 +48,7 @@ export class ProfileService implements CapabilityProvider {
       )
       .lean()
       .exec();
-    return this.toRecord(doc);
+    return serialize<ProfileRecord>(doc);
   }
 
   async update(
@@ -94,6 +69,6 @@ export class ProfileService implements CapabilityProvider {
       )
       .lean()
       .exec();
-    return this.toRecord(doc);
+    return serialize<ProfileRecord>(doc);
   }
 }

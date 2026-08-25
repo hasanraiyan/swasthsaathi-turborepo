@@ -15,11 +15,13 @@ import { NestFactory } from '@nestjs/core';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Actor } from '@repo/contracts';
 import type { Connection } from 'mongoose';
+import { Types } from 'mongoose';
 
 import { AppModule } from '../src/app.module';
 import { CapabilityRegistry } from '../src/capabilities/capability-registry.service';
 
 const actor: Actor = { userId: 'user_smoke_test' };
+const today = new Date().toISOString().slice(0, 10);
 
 if (!/_smoke(\?|$)/.test(process.env.MONGODB_URI ?? '')) {
   console.error(
@@ -208,6 +210,39 @@ async function main() {
   expect(
     'a profile predating the baseline fields still produces a plan',
     Array.isArray(legacyPlan.checks) && legacyPlan.snapshot.baselineComplete === false,
+  );
+
+  const legacyProfile = (await registry.invoke('profile.get', legacy)) as {
+    allergies: unknown;
+    familyHistory: unknown;
+  };
+  expect(
+    'and comes back with the array fields its contract promises',
+    Array.isArray(legacyProfile.allergies) && Array.isArray(legacyProfile.familyHistory),
+  );
+
+  // Same hazard on a different collection: a schedule written before
+  // `daysOfWeek` existed would break dose materialisation on read.
+  const legacyMedicine = (await registry.invoke('medicines.create', legacy, {
+    name: 'Legacy tablet',
+  })) as { id: string };
+  await connection.collection('medication_schedules').insertOne({
+    userId: legacy.userId,
+    medicineId: new Types.ObjectId(legacyMedicine.id),
+    doseAmount: 1,
+    doseUnit: 'tablet',
+    timesOfDay: ['09:00'],
+    startsOn: today,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const legacyDay = (await registry.invoke('medicationDoses.day', legacy)) as {
+    doses: unknown[];
+  };
+  expect(
+    'a schedule predating daysOfWeek still materialises its doses',
+    legacyDay.doses.length === 1,
   );
 
   // Ownership check: a different user must not see any of it.

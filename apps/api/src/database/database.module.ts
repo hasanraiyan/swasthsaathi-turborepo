@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { ReferenceValidator } from './reference-validator';
+import { fillDefaultsOnRead } from './schemas/fill-defaults-on-read';
 import { Appointment, AppointmentSchema } from './schemas/appointment.schema';
 import { Condition, ConditionSchema } from './schemas/condition.schema';
 import { Doctor, DoctorSchema } from './schemas/doctor.schema';
@@ -30,7 +31,22 @@ import {
   SymptomEntrySchema,
 } from './schemas/symptom-entry.schema';
 
-const models = MongooseModule.forFeature([
+// Apply the fill-defaults plugin to every schema while each is still
+// individually typed.  The array below widens to a union, so calling
+// .plugin() after that loses the concrete generic and TS2349 fires.
+ProfileSchema.plugin(fillDefaultsOnRead);
+ConditionSchema.plugin(fillDefaultsOnRead);
+DoctorSchema.plugin(fillDefaultsOnRead);
+MedicineSchema.plugin(fillDefaultsOnRead);
+MedicationScheduleSchema.plugin(fillDefaultsOnRead);
+MedicationDoseSchema.plugin(fillDefaultsOnRead);
+AppointmentSchema.plugin(fillDefaultsOnRead);
+SymptomEntrySchema.plugin(fillDefaultsOnRead);
+MeasurementSchema.plugin(fillDefaultsOnRead);
+HealthDocumentSchema.plugin(fillDefaultsOnRead);
+PreventiveCheckLogSchema.plugin(fillDefaultsOnRead);
+
+const registrations = [
   { name: Profile.name, schema: ProfileSchema },
   { name: Condition.name, schema: ConditionSchema },
   { name: Doctor.name, schema: DoctorSchema },
@@ -42,7 +58,9 @@ const models = MongooseModule.forFeature([
   { name: Measurement.name, schema: MeasurementSchema },
   { name: HealthDocument.name, schema: HealthDocumentSchema },
   { name: PreventiveCheckLog.name, schema: PreventiveCheckLogSchema },
-]);
+];
+
+const models = MongooseModule.forFeature(registrations);
 
 /**
  * The connection to MongoDB and every model in the system.
