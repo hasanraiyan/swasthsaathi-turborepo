@@ -25,6 +25,17 @@ const TIMEOUT_MS = 60_000;
 /** Enough to choose between; not so many that the run is never finished. */
 const MAX_COMPARED = 20;
 
+/**
+ * Token budgets, deliberately generous.
+ *
+ * A reasoning model spends this allowance thinking before it writes a word,
+ * so a tight ceiling does not produce a short answer -- it produces an empty
+ * one, with `finish_reason: length` and nothing to show. Measuring a model
+ * with too small a budget says nothing about the model.
+ */
+const PLAIN_BUDGET = 800;
+const TOOL_BUDGET = 1500;
+
 function loadEnv() {
   let raw;
   try {
@@ -162,7 +173,7 @@ async function compare(env) {
         model,
         messages: [{ role: 'user', content: 'What medicines am I currently taking?' }],
         tools: [TOOL],
-        max_tokens: 200,
+        max_tokens: TOOL_BUDGET,
       }),
     });
 
@@ -236,7 +247,7 @@ async function main() {
     body: JSON.stringify({
       model: env.OPENAI_MODEL,
       messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
-      max_tokens: 10,
+      max_tokens: PLAIN_BUDGET,
     }),
   });
 
@@ -247,11 +258,23 @@ async function main() {
         '  listing models worked. That is a network path issue, not a wrong key.',
     );
   }
-  console.log(
-    `     ok — ${plain.ms}ms — ${JSON.stringify(
-      (JSON.parse(plain.body).choices?.[0]?.message?.content ?? '').slice(0, 60),
-    )}`,
-  );
+  const plainParsed = JSON.parse(plain.body);
+  const plainText = plainParsed.choices?.[0]?.message?.content ?? '';
+  if (!plainText.trim()) {
+    const reasoning = plainParsed.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+    fail(
+      [
+        `Answered in ${plain.ms}ms but said nothing.`,
+        `  finish_reason: ${plainParsed.choices?.[0]?.finish_reason}, ${reasoning} tokens spent reasoning.`,
+        '',
+        '  A reasoning model spends its token budget thinking before it writes a word,',
+        `  so a ceiling that is too low returns an empty string rather than a short answer.`,
+        `  This already asked for ${PLAIN_BUDGET}; if that is not enough, the model wants`,
+        '  more headroom than a check like this should need.',
+      ].join('\n'),
+    );
+  }
+  console.log(`     ok — ${plain.ms}ms — ${JSON.stringify(plainText.slice(0, 60))}`);
 
   // 3. The one that decides whether this model can run the product.
   console.log('\n  3. function calling');
@@ -261,7 +284,7 @@ async function main() {
       model: env.OPENAI_MODEL,
       messages: [{ role: 'user', content: 'What medicines am I currently taking?' }],
       tools: [TOOL],
-      max_tokens: 200,
+      max_tokens: TOOL_BUDGET,
     }),
   });
 
@@ -275,8 +298,14 @@ async function main() {
   if (calls.length > 0) {
     console.log(`     ok — ${tooled.ms}ms — called ${calls[0].function.name}(${calls[0].function.arguments})`);
   } else {
-    console.log(`     NO TOOL CALL — ${tooled.ms}ms`);
-    console.log(`     it answered instead: ${JSON.stringify((message.content ?? '').slice(0, 160))}`);
+    const parsed = JSON.parse(tooled.body);
+    const reasoning = parsed.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+    console.log(`     NO TOOL CALL — ${tooled.ms}ms (finish_reason: ${parsed.choices?.[0]?.finish_reason})`);
+    if (!(message.content ?? '').trim()) {
+      console.log(`     and said nothing at all — ${reasoning} tokens went on reasoning`);
+    } else {
+      console.log(`     it answered instead: ${JSON.stringify(message.content.slice(0, 160))}`);
+    }
   }
 
   // 4. The title model only has to produce a short line.
@@ -289,7 +318,7 @@ async function main() {
         { role: 'system', content: 'Name this conversation in three or four words. Reply with the name only.' },
         { role: 'user', content: 'my blood pressure has been high for two weeks' },
       ],
-      max_tokens: 24,
+      max_tokens: PLAIN_BUDGET,
     }),
   });
 

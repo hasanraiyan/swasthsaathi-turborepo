@@ -87,7 +87,12 @@ export class ModelFactory implements OnModuleInit {
       model: this.titleModelName,
       apiKey: this.apiKey(),
       temperature: 0.2,
-      maxTokens: 24,
+      // Not 24, even though a title is four words. A reasoning model spends
+      // this budget thinking before it writes anything, and a ceiling that
+      // low means it is cut off mid-thought and returns an empty string --
+      // every session then stays "New chat" with no error to explain it.
+      // The prompt keeps the answer short; this only stops a runaway.
+      maxTokens: this.number('AGENT_TITLE_MAX_TOKENS', 512),
       // Short on purpose. Naming a chat is a nicety; it must never be the
       // reason someone waits, and an untitled session costs nothing.
       timeout: this.number('AGENT_TITLE_TIMEOUT_MS', 15_000),
