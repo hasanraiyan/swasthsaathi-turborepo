@@ -1,7 +1,9 @@
 /**
  * Check that the configured model can actually run the assistant.
  *
- *   node scripts/check-model.mjs
+ *   node scripts/check-model.mjs                 check what .env is set to
+ *   node scripts/check-model.mjs <model>         check one other model
+ *   node scripts/check-model.mjs --compare       time every candidate
  *
  * Reads apps/api/.env directly -- no dependencies, no build step, so it can be
  * run before anything else works.
@@ -88,8 +90,81 @@ const TOOL = {
   },
 };
 
+/**
+ * Models on this gateway worth considering for the assistant.
+ *
+ * All are chat models plausibly capable of function calling -- embedding,
+ * vision, safety and reward models are excluded because they cannot run it at
+ * all. Whether each actually calls a tool, and how long it takes, is the
+ * whole point of measuring rather than assuming.
+ */
+const CANDIDATES = [
+  'deepseek-ai/deepseek-v4-flash-0731',
+  'meta/llama-3.3-70b-instruct',
+  'meta/llama-3.1-70b-instruct',
+  'meta/llama-3.1-8b-instruct',
+  'nvidia/llama-3.3-nemotron-super-49b-v1.5',
+  'nvidia/llama-3.1-nemotron-70b-instruct',
+  'nvidia/nvidia-nemotron-nano-9b-v2',
+  'mistralai/mistral-large-2-instruct',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'moonshotai/kimi-k2.6',
+];
+
+/**
+ * Time one model on the only question that matters: does it reach for the
+ * tool, and how long does the user wait to find out.
+ */
+async function compare(env) {
+  console.log(`\n  Timing ${CANDIDATES.length} models on one tool call. This takes a while.\n`);
+  console.log('  ' + 'model'.padEnd(42) + 'result');
+  console.log('  ' + '-'.repeat(64));
+
+  const results = [];
+  for (const model of CANDIDATES) {
+    const probe = await call(env, '/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'What medicines am I currently taking?' }],
+        tools: [TOOL],
+        max_tokens: 200,
+      }),
+    });
+
+    let verdict;
+    if (!probe.ok) {
+      verdict = probe.status === 0 ? 'no response' : `HTTP ${probe.status}`;
+    } else {
+      const calls = JSON.parse(probe.body).choices?.[0]?.message?.tool_calls ?? [];
+      verdict = calls.length > 0 ? `${(probe.ms / 1000).toFixed(1)}s  tool call` : 'ignored the tool';
+      if (calls.length > 0) results.push({ model, ms: probe.ms });
+    }
+    console.log('  ' + model.padEnd(42) + verdict);
+  }
+
+  console.log('\n  Fastest that actually called the tool:');
+  for (const row of results.sort((a, b) => a.ms - b.ms).slice(0, 5)) {
+    console.log(`    ${(row.ms / 1000).toFixed(1).padStart(6)}s  ${row.model}`);
+  }
+  console.log('\n  Set OPENAI_MODEL in .env to whichever you pick.\n');
+}
+
 async function main() {
   const env = loadEnv();
+  const [, , arg] = process.argv;
+
+  if (arg === '--compare') {
+    if (!env.OPENAI_API_KEY) fail('OPENAI_API_KEY is empty.');
+    await compare(env);
+    return;
+  }
+  // A model named on the command line overrides .env, so alternatives can be
+  // tried without editing anything.
+  if (arg) {
+    env.OPENAI_MODEL = arg;
+  }
   const endpoint = env.OPENAI_BASE_URL || 'https://api.openai.com/v1 (default)';
 
   console.log(`\n  endpoint     ${endpoint}`);
