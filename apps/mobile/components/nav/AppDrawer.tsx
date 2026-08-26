@@ -2,7 +2,6 @@ import { useAuth } from '@clerk/expo';
 import Feather from '@expo/vector-icons/Feather';
 import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { GestureResponderEvent } from 'react-native';
 import {
   Animated,
   Modal,
@@ -326,37 +325,40 @@ function ConversationRow({
   onPress: () => void;
   onMenu: () => void;
 }) {
+  // Two siblings, not one Pressable nested in another: `accessibilityRole:
+  // 'button'` renders a real DOM <button> on web, and a <button> inside a
+  // <button> is invalid HTML -- this app's own error overlay caught it as a
+  // hard render error, not just a console warning. The outer View carries
+  // the row's background and padding; each Pressable only wraps what it
+  // actually controls.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={conversation.title}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.pressed]}
-    >
-      <View style={styles.rowText}>
-        {/* Title only: the session list is a list of names, and the API names
-            each conversation from its first message. */}
-        <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
-          {conversation.title}
-        </Text>
-      </View>
-      <Text style={styles.rowTime}>{shortTime(conversation.updatedAt)}</Text>
+    <View style={[styles.row, active && styles.rowActive]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={conversation.title}
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
+      >
+        <View style={styles.rowText}>
+          {/* Title only: the session list is a list of names, and the API
+              names each conversation from its first message. */}
+          <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
+            {conversation.title}
+          </Text>
+        </View>
+        <Text style={styles.rowTime}>{shortTime(conversation.updatedAt)}</Text>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`More options for ${conversation.title}`}
         hitSlop={8}
-        onPress={(event: GestureResponderEvent) => {
-          // Stops the tap from also opening the conversation underneath --
-          // real DOM click bubbling on web, not just RN's own responder.
-          event.stopPropagation();
-          onMenu();
-        }}
+        onPress={onMenu}
         style={({ pressed }) => [styles.rowMenuButton, pressed && styles.pressed]}
       >
         <Feather name="more-horizontal" size={16} color={colors.taupe} />
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 
@@ -580,6 +582,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.input,
   },
   rowActive: { backgroundColor: colors.surface },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowText: { flex: 1 },
   rowTitle: { ...type.body, color: colors.ink },
   rowTitleActive: { fontWeight: '600' },
