@@ -217,7 +217,10 @@ export const agentInfoSchema = z.object({
   protocol: z.literal('ag-ui'),
   transport: z.literal('sse'),
   model: z.string(),
+  /** Where the model is served from; null means OpenAI itself. */
+  endpoint: z.string().nullable(),
   toolCount: z.number().int().min(0),
+  skillCount: z.number().int().min(0),
   /** Whether write tools pause for confirmation before running. */
   confirmsWrites: z.boolean(),
 });

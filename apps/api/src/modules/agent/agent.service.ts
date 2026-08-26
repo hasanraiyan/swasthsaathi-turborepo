@@ -75,6 +75,7 @@ export class AgentService {
       protocol: 'ag-ui' as const,
       transport: 'sse' as const,
       model: this.models.chatModelName,
+      endpoint: this.models.baseUrl ?? null,
       toolCount: this.registry.list().length,
       skillCount: this.agents.skills().length,
       confirmsWrites: this.confirmsWrites,
