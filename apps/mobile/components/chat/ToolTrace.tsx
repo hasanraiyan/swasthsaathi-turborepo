@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { humanize } from '../../lib/format';
 import { colors, radii, spacing, statusColors, type } from '../../theme';
 import { FilePresentCard } from './FilePresentCard';
+import { JsonTree } from './JsonTree';
 
 interface ToolTraceProps {
   call: TranscriptToolCall;
@@ -72,19 +73,48 @@ export function ToolTrace({ call, onOpenFile }: ToolTraceProps) {
       {open ? (
         <View style={styles.detail}>
           {Object.keys(call.args).length > 0 ? (
-            <Text style={styles.mono} numberOfLines={6}>
-              {JSON.stringify(call.args, null, 2)}
-            </Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Arguments</Text>
+              <JsonTree value={call.args} />
+            </View>
           ) : null}
           {call.result ? (
-            <Text style={[styles.mono, styles.result]} numberOfLines={10}>
-              {call.result}
-            </Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Result</Text>
+              <ResultView content={call.result} />
+            </View>
           ) : null}
         </View>
       ) : null}
     </View>
   );
+}
+
+/**
+ * A tool's result, drilled into like the arguments above it.
+ *
+ * Every capability returns JSON -- confirmed in `tool-adapter.ts`, which
+ * always `JSON.stringify`s the call's outcome -- so this only falls back to
+ * plain text for a shape that changed underneath it, not as the normal path.
+ */
+function ResultView({ content }: { content: string }) {
+  const parsed = tryParseJson(content);
+  if (parsed !== undefined) {
+    return <JsonTree value={parsed} />;
+  }
+  return (
+    <Text style={[styles.mono, styles.result]} numberOfLines={10}>
+      {content}
+    </Text>
+  );
+}
+
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `medicines.list` reads as "Medicines · list" rather than a symbol. */
@@ -109,8 +139,16 @@ const styles = StyleSheet.create({
     // turning a debugging aid into another card in the thread.
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: colors.hairline,
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingVertical: spacing.xs,
+  },
+  section: { gap: 2 },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.hairline,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   mono: {
     ...type.caption,

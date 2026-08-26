@@ -3,9 +3,11 @@ import type { AgentTodo, TranscriptTurn } from '@repo/contracts';
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
+import { groupToolCalls } from '../../lib/tool-groups';
 import { colors, radii, spacing, type } from '../../theme';
 import { TodoChecklist } from './TodoChecklist';
 import { ToolTrace } from './ToolTrace';
+import { ToolTraceGroup } from './ToolTraceGroup';
 
 interface TurnProps {
   turn: TranscriptTurn;
@@ -35,10 +37,19 @@ export function Turn({ turn, onOpenFile }: TurnProps) {
 
   return (
     <View style={styles.assistant}>
-      {/* Above the text: the work happened before the answer did. */}
-      {turn.toolCalls.map((call) => (
-        <ToolTrace key={call.toolCallId} call={call} onOpenFile={onOpenFile} />
-      ))}
+      {/* Above the text: the work happened before the answer did. Several
+          calls in a row read as one thing, not a list of separate steps. */}
+      {groupToolCalls(turn.toolCalls).map((item) =>
+        item.kind === 'group' ? (
+          <ToolTraceGroup
+            key={item.calls[0]!.toolCallId}
+            calls={item.calls}
+            onOpenFile={onOpenFile}
+          />
+        ) : (
+          <ToolTrace key={item.call.toolCallId} call={item.call} onOpenFile={onOpenFile} />
+        ),
+      )}
       {turn.content.trim() ? <Text style={styles.assistantText}>{turn.content}</Text> : null}
     </View>
   );
