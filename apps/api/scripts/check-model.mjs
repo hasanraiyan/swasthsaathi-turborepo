@@ -22,6 +22,9 @@ import { fileURLToPath } from 'node:url';
 const APP_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 60_000;
 
+/** Enough to choose between; not so many that the run is never finished. */
+const MAX_COMPARED = 20;
+
 function loadEnv() {
   let raw;
   try {
@@ -113,16 +116,46 @@ const CANDIDATES = [
 ];
 
 /**
- * Time one model on the only question that matters: does it reach for the
- * tool, and how long does the user wait to find out.
+ * Which models to time.
+ *
+ * Some gateways say in their catalogue whether a model supports tools --
+ * Pollinations does, NVIDIA does not. Where that is published it is far
+ * better than a list maintained here, which goes stale the moment the
+ * gateway changes. Falls back to the hand-kept list otherwise.
  */
+async function candidatesFor(env) {
+  const listing = await call(env, '/models');
+  if (listing.ok) {
+    try {
+      const parsed = JSON.parse(listing.body);
+      const rows = Array.isArray(parsed) ? parsed : (parsed.data ?? []);
+      const declared = rows.filter(
+        (row) => row.tools === true && row.category === 'text' && !String(row.name).includes('/'),
+      );
+      // Community re-hosts are excluded above: same models, more variance.
+      if (declared.length > 0) {
+        // Capped: a gateway can publish scores of these, and timing all of
+        // them takes long enough that nobody runs it twice.
+        return {
+          models: declared.map((row) => row.name).slice(0, MAX_COMPARED),
+          source: `${declared.length} declared by the endpoint, timing the first ${Math.min(declared.length, MAX_COMPARED)}`,
+        };
+      }
+    } catch {
+      // Not a shape we recognise -- fall through to the fixed list.
+    }
+  }
+  return { models: CANDIDATES, source: 'built-in list' };
+}
+
 async function compare(env) {
-  console.log(`\n  Timing ${CANDIDATES.length} models on one tool call. This takes a while.\n`);
+  const { models, source } = await candidatesFor(env);
+  console.log(`\n  Timing ${models.length} models on one tool call (${source}). This takes a while.\n`);
   console.log('  ' + 'model'.padEnd(42) + 'result');
   console.log('  ' + '-'.repeat(64));
 
   const results = [];
-  for (const model of CANDIDATES) {
+  for (const model of models) {
     const probe = await call(env, '/chat/completions', {
       method: 'POST',
       body: JSON.stringify({
