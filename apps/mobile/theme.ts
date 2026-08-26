@@ -83,6 +83,18 @@ export const radii = {
 } as const;
 
 /**
+ * How wide a screen's own content is allowed to get.
+ *
+ * Every screen here is built for a phone-width column: a form field, a
+ * card, a line of chat. Letting that column stretch to fill a desktop
+ * browser window doesn't make it more useful -- it makes every line of text
+ * absurdly long and every card look lost in empty space. Capping the width
+ * and centering it is what makes the same layout that already works on a
+ * phone also read correctly at any wider size, without a second design.
+ */
+export const contentMaxWidth = 720;
+
+/**
  * Suppress the browser's own focus ring on text inputs.
  *
  * `react-native-web` renders `TextInput` as a real DOM input, so the browser

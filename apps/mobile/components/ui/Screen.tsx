@@ -4,7 +4,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDrawer } from '../../lib/navigation';
-import { colors, spacing, type } from '../../theme';
+import { colors, contentMaxWidth, spacing, type } from '../../theme';
 import { ThreadRule } from './ThreadRule';
 
 interface ScreenProps {
@@ -82,7 +82,7 @@ export function Screen({
 
       {footer ? (
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-          {footer}
+          <View style={styles.footerInner}>{footer}</View>
         </View>
       ) : null}
     </View>
@@ -99,16 +99,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressed: { opacity: 0.6 },
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  // width: '100%' alongside maxWidth so alignSelf: 'center' has a
+  // full-width box to actually center within, on both native and web.
+  content: {
+    width: '100%',
+    maxWidth: contentMaxWidth,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
   header: { marginBottom: spacing.lg },
   headerRule: { marginBottom: spacing.sm },
   title: { ...type.display, color: colors.ink },
   subtitle: { ...type.body, color: colors.taupe, marginTop: spacing.xs },
+  // The bar itself stays full width -- its background and top rule are
+  // chrome, not content -- only what sits inside it lines up with the
+  // scrolling content above.
   footer: {
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     backgroundColor: colors.cream,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
+  },
+  footerInner: {
+    width: '100%',
+    maxWidth: contentMaxWidth,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.lg,
   },
 });

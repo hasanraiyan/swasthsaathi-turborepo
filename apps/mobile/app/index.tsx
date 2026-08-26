@@ -18,7 +18,7 @@ import { IntentCards } from '../components/chat/IntentCards';
 import { ApprovalPrompt, Plan, Thinking, Turn } from '../components/chat/MessageList';
 import { useChat } from '../lib/chat-store';
 import { useDrawer } from '../lib/navigation';
-import { colors, spacing, type } from '../theme';
+import { colors, contentMaxWidth, spacing, type } from '../theme';
 
 /**
  * Chat: the app's home screen.
@@ -135,12 +135,14 @@ export default function ChatScreen() {
         </ScrollView>
 
         <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-          <Composer
-            value={draft}
-            onChangeText={setDraft}
-            onSend={() => sendMessage(draft)}
-            disabled={pending}
-          />
+          <View style={styles.composerInner}>
+            <Composer
+              value={draft}
+              onChangeText={setDraft}
+              onSend={() => sendMessage(draft)}
+              disabled={pending}
+            />
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -195,7 +197,15 @@ const styles = StyleSheet.create({
   headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...type.title, color: colors.ink, flex: 1, textAlign: 'center' },
   pressed: { opacity: 0.6 },
-  content: { paddingVertical: spacing.lg, flexGrow: 1 },
+  // width: '100%' alongside maxWidth so alignSelf: 'center' has a full-width
+  // box to actually center within, on both native and web.
+  content: {
+    width: '100%',
+    maxWidth: contentMaxWidth,
+    alignSelf: 'center',
+    paddingVertical: spacing.lg,
+    flexGrow: 1,
+  },
   contentEmpty: { justifyContent: 'center' },
   thread: { paddingHorizontal: spacing.lg },
   error: {
@@ -214,11 +224,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   cards: { marginBottom: spacing.sm },
+  // The bar stays full width -- its background and top rule are chrome, not
+  // content -- only the composer itself lines up with the thread above.
   composer: {
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     backgroundColor: colors.cream,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
+  },
+  composerInner: {
+    width: '100%',
+    maxWidth: contentMaxWidth,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.lg,
   },
 });
