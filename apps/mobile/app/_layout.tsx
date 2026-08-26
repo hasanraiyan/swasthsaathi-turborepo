@@ -10,7 +10,7 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppDrawer } from '../components/nav/AppDrawer';
@@ -100,9 +100,14 @@ function AuthGate() {
       return;
     }
     const onSignIn = segments[0] === 'sign-in';
-    if (!isSignedIn && !onSignIn) {
-      router.replace('/sign-in');
-    } else if (isSignedIn && onSignIn) {
+    // Native has no equivalent screen: opening the app is already the "what
+    // is this" moment there, so an unauthenticated visitor goes straight to
+    // sign-in exactly as before. Only the web front door changed.
+    const onWelcome = Platform.OS === 'web' && segments[0] === 'welcome';
+
+    if (!isSignedIn && !onSignIn && !onWelcome) {
+      router.replace(Platform.OS === 'web' ? '/welcome' : '/sign-in');
+    } else if (isSignedIn && (onSignIn || onWelcome)) {
       router.replace('/');
     }
   }, [isLoaded, isSignedIn, segments, router]);
@@ -126,6 +131,7 @@ function AuthGate() {
       <Stack.Screen name="records" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="welcome" options={{ headerShown: false }} />
 
       {/* Sub-pages reached from a section. These keep the stack header, so the
           way back out is a back arrow rather than the drawer. */}
