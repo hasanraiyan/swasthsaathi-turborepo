@@ -252,7 +252,7 @@ function ConversationRow({
   active: boolean;
   onPress: () => void;
 }) {
-  const last = conversation.messages[conversation.messages.length - 1];
+  const last = conversation.turns[conversation.turns.length - 1];
 
   return (
     <Pressable
@@ -268,7 +268,7 @@ function ConversationRow({
         </Text>
         {last ? (
           <Text style={styles.rowSnippet} numberOfLines={1}>
-            {last.text}
+            {last.content}
           </Text>
         ) : null}
       </View>

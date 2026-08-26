@@ -1,50 +1,43 @@
+import type { AgentFile, AgentTodo, PendingApproval, TranscriptTurn } from '@repo/contracts';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 /**
- * Frontend-only chat state.
+ * Chat state for the interface, ahead of the stream being wired up.
  *
- * There is no chatbot backend yet, so conversations live in memory and are
- * seeded with mock history. Everything a real implementation would need is
- * already shaped here -- conversations, messages, a pending flag -- so wiring
- * a service in later means replacing the bodies of `sendMessage` and the
- * initial load, not reworking the screens.
+ * The shapes are the real ones from `@repo/contracts` -- `TranscriptTurn`,
+ * `AgentFile`, `AgentTodo`, `PendingApproval` -- so connecting
+ * `POST /api/agent/run` later replaces where this data comes from without
+ * touching a single component.
  */
-
-export type ChatRole = 'user' | 'assistant' | 'notice';
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  text: string;
-  createdAt: string;
-}
 
 export interface Conversation {
   id: string;
   title: string;
-  messages: ChatMessage[];
+  turns: TranscriptTurn[];
+  todos: AgentTodo[];
+  files: AgentFile[];
+  pendingApprovals: PendingApproval[];
   updatedAt: string;
 }
 
 interface ChatContextValue {
   conversations: Conversation[];
   activeConversation: Conversation | null;
-  /** True while the (not yet built) assistant would be composing a reply. */
   pending: boolean;
-  /** Text in the composer. Lives here so a capability card can prefill it. */
   draft: string;
   setDraft: (value: string) => void;
   sendMessage: (text: string) => void;
   newChat: () => void;
   selectConversation: (id: string) => void;
+  /** Look a file up by the path a `present_file` card carries. */
+  fileAt: (filePath: string) => AgentFile | null;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
-/** The reply a message gets until the assistant is actually connected. */
-const NOT_CONNECTED_NOTICE =
-  "The health assistant isn't connected yet. Your message is kept on this device so the chat can be tried out — nothing is sent anywhere.";
+const NOT_CONNECTED =
+  "The assistant isn't connected yet. Your message is kept on this device so the chat can be tried out — nothing is sent anywhere.";
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>(mockConversations);
@@ -53,7 +46,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState(false);
   const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // A reply landing after the screen has gone would set state on nothing.
   useEffect(
     () => () => {
       if (replyTimer.current) {
@@ -80,6 +72,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setPending(false);
   }, []);
 
+  const fileAt = useCallback(
+    (filePath: string) =>
+      conversations.flatMap((c) => c.files).find((file) => file.path === filePath) ?? null,
+    [conversations],
+  );
+
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
@@ -88,57 +86,56 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
 
       const now = new Date().toISOString();
-      const message: ChatMessage = {
-        id: nextId('m'),
+      const turn: TranscriptTurn = {
+        id: nextId('t'),
         role: 'user',
-        text: trimmed,
-        createdAt: now,
+        content: trimmed,
+        toolCalls: [],
       };
 
-      // Sending from an empty chat is what brings a conversation into
-      // existence, so the drawer never lists a thread with nothing in it.
       const conversationId = activeId ?? nextId('c');
       setConversations((current) => {
-        const existing = current.find((conversation) => conversation.id === conversationId);
+        const existing = current.find((c) => c.id === conversationId);
         if (!existing) {
           return [
-            { id: conversationId, title: titleFrom(trimmed), messages: [message], updatedAt: now },
+            {
+              id: conversationId,
+              title: titleFrom(trimmed),
+              turns: [turn],
+              todos: [],
+              files: [],
+              pendingApprovals: [],
+              updatedAt: now,
+            },
             ...current,
           ];
         }
-        return current.map((conversation) =>
-          conversation.id === conversationId
-            ? { ...conversation, messages: [...conversation.messages, message], updatedAt: now }
-            : conversation,
+        return current.map((c) =>
+          c.id === conversationId ? { ...c, turns: [...c.turns, turn], updatedAt: now } : c,
         );
       });
       setActiveId(conversationId);
       setDraft('');
       setPending(true);
 
-      // Stands in for the round trip, so the pending state is visible. It
-      // appends an honest notice -- never invented assistant content.
+      // Stands in for the round trip so the waiting state is visible. It says
+      // plainly that nothing is connected -- it never invents an answer.
       replyTimer.current = setTimeout(() => {
         setConversations((current) =>
-          current.map((conversation) =>
-            conversation.id === conversationId
+          current.map((c) =>
+            c.id === conversationId
               ? {
-                  ...conversation,
-                  messages: [
-                    ...conversation.messages,
-                    {
-                      id: nextId('m'),
-                      role: 'notice',
-                      text: NOT_CONNECTED_NOTICE,
-                      createdAt: new Date().toISOString(),
-                    },
+                  ...c,
+                  turns: [
+                    ...c.turns,
+                    { id: nextId('t'), role: 'assistant', content: NOT_CONNECTED, toolCalls: [] },
                   ],
                 }
-              : conversation,
+              : c,
           ),
         );
         setPending(false);
-      }, 700);
+      }, 900);
     },
     [activeId],
   );
@@ -153,8 +150,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       sendMessage,
       newChat,
       selectConversation,
+      fileAt,
     }),
-    [conversations, activeConversation, pending, draft, sendMessage, newChat, selectConversation],
+    [conversations, activeConversation, pending, draft, sendMessage, newChat, selectConversation, fileAt],
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
@@ -180,8 +178,9 @@ export function groupConversations(
     { label: 'Earlier', items: [] },
   ];
 
-  const sorted = [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  for (const conversation of sorted) {
+  for (const conversation of [...conversations].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  )) {
     const age = now - new Date(conversation.updatedAt).getTime();
     const bucket = age < day ? buckets[0] : age < 7 * day ? buckets[1] : buckets[2];
     bucket!.items.push(conversation);
@@ -196,7 +195,6 @@ function nextId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${counter}`;
 }
 
-/** A thread's name is its opening question, trimmed to fit the drawer. */
 function titleFrom(text: string): string {
   const firstLine = text.split('\n')[0]!.trim();
   return firstLine.length > 44 ? `${firstLine.slice(0, 44).trimEnd()}…` : firstLine;
@@ -208,30 +206,83 @@ function daysAgo(days: number, hour = 9): string {
   return date.toISOString();
 }
 
+const APPOINTMENT_SHEET = `# Cardiology follow-up — 14 September
+
+## Why I am here
+Six-month review after starting Amlodipine.
+
+## What has changed
+- Blood pressure down from 148/94 to 128/82 across six readings
+- Two missed evening doses in the last month
+- Occasional ankle swelling in the evenings
+
+## What I am taking
+- Metformin 500 mg, twice a day, after food
+- Amlodipine 5 mg, once in the morning
+
+## What I want to ask
+1. Is the ankle swelling related to the Amlodipine?
+2. Should the evening Metformin move earlier?
+3. When is the next blood test due?
+`;
+
 /**
- * Placeholder history so the drawer can be designed and tried out.
- *
- * Assistant turns here are written as plausible product copy for layout
- * purposes only -- they are fixtures, not generated answers, and they go away
- * with the first real backend.
+ * Placeholder history, written to exercise every part of the interface --
+ * a tool trace, a produced file, a plan, and a pending approval. It goes away
+ * with the first real stream.
  */
 const mockConversations: Conversation[] = [
   {
     id: 'c_mock_1',
-    title: 'What do I take in the morning?',
+    title: 'Preparing for the cardiology visit',
     updatedAt: daysAgo(0, 8),
-    messages: [
+    todos: [
+      { content: 'Read the upcoming appointment', status: 'completed' },
+      { content: 'Check recent blood pressure readings', status: 'completed' },
+      { content: 'Write the summary sheet', status: 'in_progress' },
+      { content: 'Note questions to ask', status: 'pending' },
+    ],
+    files: [{ path: '/workspace/outputs/appointment-2026-09-14.md', content: APPOINTMENT_SHEET, size: APPOINTMENT_SHEET.length }],
+    pendingApprovals: [],
+    turns: [
       {
-        id: 'm_mock_1',
+        id: 't1',
         role: 'user',
-        text: 'What do I take in the morning?',
-        createdAt: daysAgo(0, 8),
+        content: 'I have a cardiology appointment next week. Can you help me get ready?',
+        toolCalls: [],
       },
       {
-        id: 'm_mock_2',
+        id: 't2',
         role: 'assistant',
-        text: 'Metformin 500 mg, one tablet after breakfast. It was due at 08:00 and is still marked pending.',
-        createdAt: daysAgo(0, 8),
+        content:
+          'I have put together a page you can take with you. Your blood pressure has come down from 148/94 to 128/82 since starting Amlodipine, which is worth mentioning — as are the two evening doses you missed last month.',
+        toolCalls: [
+          {
+            toolCallId: 'call_1',
+            toolName: 'appointments.list',
+            args: { upcomingOnly: true },
+            result: '{"items":[{"title":"Cardiology follow-up","scheduledFor":"2026-09-14T10:30:00+05:30"}],"total":1}',
+            isError: false,
+          },
+          {
+            toolCallId: 'call_2',
+            toolName: 'measurements.trend',
+            args: { type: 'blood_pressure' },
+            result: '{"count":6,"average":128,"averageSecondary":82,"min":120,"max":138}',
+            isError: false,
+          },
+          {
+            toolCallId: 'call_3',
+            toolName: 'present_file',
+            args: {
+              filePath: '/workspace/outputs/appointment-2026-09-14.md',
+              title: 'Cardiology follow-up sheet',
+              description: 'One page to take with you on the 14th',
+            },
+            result: '{"presented":true}',
+            isError: false,
+          },
+        ],
       },
     ],
   },
@@ -239,37 +290,54 @@ const mockConversations: Conversation[] = [
     id: 'c_mock_2',
     title: 'How has my blood pressure been?',
     updatedAt: daysAgo(3, 19),
-    messages: [
+    todos: [],
+    files: [],
+    pendingApprovals: [],
+    turns: [
+      { id: 't3', role: 'user', content: 'How has my blood pressure been?', toolCalls: [] },
       {
-        id: 'm_mock_3',
-        role: 'user',
-        text: 'How has my blood pressure been?',
-        createdAt: daysAgo(3, 19),
-      },
-      {
-        id: 'm_mock_4',
+        id: 't4',
         role: 'assistant',
-        text: 'Your last six readings averaged 128/82, down from 136/88 the month before.',
-        createdAt: daysAgo(3, 19),
+        content:
+          'Your last six readings averaged 128/82, down from 136/88 the month before. That is a real improvement, and the kind of trend worth showing your doctor.',
+        toolCalls: [
+          {
+            toolCallId: 'call_4',
+            toolName: 'measurements.trend',
+            args: { type: 'blood_pressure', from: '2026-07-01' },
+            result: '{"count":6,"average":128,"averageSecondary":82}',
+            isError: false,
+          },
+        ],
       },
     ],
   },
   {
     id: 'c_mock_3',
-    title: 'Preparing for the cardiology follow-up',
+    title: 'Stopping the evening tablet',
     updatedAt: daysAgo(11, 15),
-    messages: [
+    todos: [],
+    files: [],
+    pendingApprovals: [
       {
-        id: 'm_mock_5',
+        index: 0,
+        toolName: 'medicines.stop',
+        args: { id: '6a8dad11ef36036d8005955b', reason: 'Doctor advised stopping' },
+        description: 'Mark Metformin as stopped. Reminders stop; your history is kept.',
+      },
+    ],
+    turns: [
+      {
+        id: 't5',
         role: 'user',
-        text: 'What should I bring to the cardiology follow-up?',
-        createdAt: daysAgo(11, 15),
+        content: 'My doctor said to stop the evening Metformin.',
+        toolCalls: [],
       },
       {
-        id: 'm_mock_6',
+        id: 't6',
         role: 'assistant',
-        text: 'Your last lipid panel, the blood pressure log since March, and the list of what you are currently taking.',
-        createdAt: daysAgo(11, 15),
+        content: 'I can mark that as stopped. It will keep everything you have already recorded.',
+        toolCalls: [],
       },
     ],
   },

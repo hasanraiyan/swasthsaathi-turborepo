@@ -1,5 +1,6 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useRef } from 'react';
+import type { AgentFile } from '@repo/contracts';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,8 +13,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Composer } from '../components/chat/Composer';
+import { FileViewer } from '../components/chat/FileViewer';
 import { IntentCards } from '../components/chat/IntentCards';
-import { MessageBubble, TypingIndicator } from '../components/chat/MessageList';
+import { ApprovalPrompt, Plan, Thinking, Turn } from '../components/chat/MessageList';
 import { useChat } from '../lib/chat-store';
 import { useDrawer } from '../lib/navigation';
 import { colors, spacing, type } from '../theme';
@@ -22,17 +24,20 @@ import { colors, spacing, type } from '../theme';
  * Chat: the app's home screen.
  *
  * Navigation is the top header and the shared side drawer -- there is no
- * bottom bar anywhere in the product any more, so nothing has to be hidden
- * here.
+ * bottom bar anywhere in the product, so nothing has to be hidden here.
  */
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { openDrawer } = useDrawer();
-  const { activeConversation, pending, draft, setDraft, sendMessage, newChat } = useChat();
+  const { activeConversation, pending, draft, setDraft, sendMessage, newChat, fileAt } = useChat();
 
+  const [openFile, setOpenFile] = useState<AgentFile | null>(null);
   const scroller = useRef<ScrollView>(null);
-  const messages = activeConversation?.messages ?? [];
-  const isEmpty = messages.length === 0;
+
+  const turns = activeConversation?.turns ?? [];
+  const todos = activeConversation?.todos ?? [];
+  const approvals = activeConversation?.pendingApprovals ?? [];
+  const isEmpty = turns.length === 0;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -81,10 +86,30 @@ export default function ChatScreen() {
             <EmptyChat onAsk={setDraft} />
           ) : (
             <View style={styles.thread}>
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+              {turns.map((turn) => (
+                <Turn
+                  key={turn.id}
+                  turn={turn}
+                  onOpenFile={(path) => setOpenFile(fileAt(path))}
+                />
               ))}
-              {pending ? <TypingIndicator /> : null}
+
+              {/* Below the turns, not inside one: a plan describes the work
+                  still in progress, not something already said. */}
+              <Plan todos={todos} />
+
+              {pending ? <Thinking /> : null}
+
+              {approvals.map((approval) => (
+                <ApprovalPrompt
+                  key={`${approval.index}-${approval.toolName}`}
+                  toolName={approval.toolName}
+                  description={approval.description}
+                  onApprove={() => undefined}
+                  onReject={() => undefined}
+                  busy={false}
+                />
+              ))}
             </View>
           )}
         </ScrollView>
@@ -98,6 +123,8 @@ export default function ChatScreen() {
           />
         </View>
       </KeyboardAvoidingView>
+
+      <FileViewer file={openFile} onClose={() => setOpenFile(null)} />
     </View>
   );
 }
