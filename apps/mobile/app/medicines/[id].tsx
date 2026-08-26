@@ -2,16 +2,18 @@ import { DOSE_TIMING } from '@repo/contracts';
 import type { DoseTiming, MedicationSchedule } from '@repo/contracts';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '../../components/ui/Button';
 import { Card, CardMeta, CardTitle, SectionHeader } from '../../components/ui/Card';
 import { ChipGroup } from '../../components/ui/ChipGroup';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { humanize } from '../../lib/format';
 import { Field } from '../../components/ui/Field';
 import { Screen } from '../../components/ui/Screen';
 import { EmptyState, ErrorNotice, Loading } from '../../components/ui/States';
 import { StatusPill } from '../../components/ui/StatusPill';
+import { ApiError } from '../../lib/api';
 import { useCreateSchedule, useMedicine, useStopMedicine } from '../../lib/queries';
 import { colors, spacing, type } from '../../theme';
 
@@ -20,6 +22,7 @@ export default function MedicineDetailScreen() {
   const router = useRouter();
   const medicine = useMedicine(id ?? '');
   const stop = useStopMedicine();
+  const [confirmingStop, setConfirmingStop] = useState(false);
 
   if (medicine.isPending) {
     return (
@@ -40,18 +43,15 @@ export default function MedicineDetailScreen() {
   const item = medicine.data;
   const detail = [item.strength, humanize(item.form)].filter(Boolean).join(' · ');
 
-  function confirmStop() {
-    Alert.alert(
-      'Stop this medicine?',
-      'Reminders stop and future doses are removed. Your history is kept.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Stop',
-          style: 'destructive',
-          onPress: () => stop.mutate({ id: item.id }, { onSuccess: () => router.back() }),
+  function stopMedicine() {
+    stop.mutate(
+      { id: item.id },
+      {
+        onSuccess: () => {
+          setConfirmingStop(false);
+          router.back();
         },
-      ],
+      },
     );
   }
 
@@ -62,8 +62,6 @@ export default function MedicineDetailScreen() {
       onRefresh={() => void medicine.refetch()}
       refreshing={medicine.isRefetching}
     >
-      {stop.isError ? <ErrorNotice error={stop.error} /> : null}
-
       <View style={styles.statusRow}>
         <StatusPill
           status={item.status === 'active' ? 'taken' : 'skipped'}
@@ -90,11 +88,38 @@ export default function MedicineDetailScreen() {
 
       {item.status === 'active' ? (
         <View style={styles.stop}>
-          <Button label="Stop taking this" onPress={confirmStop} variant="outline" tone="danger" />
+          <Button
+            label="Stop taking this"
+            onPress={() => setConfirmingStop(true)}
+            variant="outline"
+            tone="danger"
+          />
         </View>
       ) : null}
+
+      <ConfirmDialog
+        visible={confirmingStop}
+        title="Stop this medicine?"
+        body={
+          stop.isError
+            ? errorMessage(stop.error)
+            : 'Reminders stop and future doses are removed. Your history is kept.'
+        }
+        confirmLabel="Stop"
+        destructive
+        busy={stop.isPending}
+        onConfirm={stopMedicine}
+        onCancel={() => setConfirmingStop(false)}
+      />
     </Screen>
   );
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.userMessage;
+  }
+  return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
 function ScheduleCard({ schedule }: { schedule: MedicationSchedule }) {
