@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing, type } from '../../theme';
+import { Markdown } from './Markdown';
 
 /**
  * Reads a file the assistant wrote.
@@ -46,12 +47,7 @@ export function FileViewer({ file, onClose }: { file: AgentFile | null; onClose:
         <ScrollView
           contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing.xl }]}
         >
-          {/* Shown as written rather than rendered: these are short, plain
-              documents, and a half-finished markdown renderer would be a
-              worse reading experience than the text itself. */}
-          <Text style={styles.content} selectable>
-            {file.content}
-          </Text>
+          <Markdown content={file.content} />
         </ScrollView>
       </View>
     </Modal>
@@ -75,5 +71,4 @@ const styles = StyleSheet.create({
   close: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6 },
   body: { padding: spacing.lg },
-  content: { ...type.body, color: colors.ink, lineHeight: 24 },
 });
