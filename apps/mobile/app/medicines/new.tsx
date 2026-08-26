@@ -134,7 +134,12 @@ function Choice({
   onPress: () => void;
 }) {
   return (
-    <Button label={label} onPress={onPress} variant={selected ? 'primary' : 'outline'} />
+    <Button
+      label={label}
+      onPress={onPress}
+      variant={selected ? 'primary' : 'outline'}
+      size="small"
+    />
   );
 }
 
@@ -142,7 +147,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   block: { marginBottom: spacing.md },
   label: { ...type.label, color: colors.ink, marginBottom: spacing.xs },
-  chips: { gap: spacing.sm },
+  // Missing flexDirection/flexWrap here stacked every condition as a
+  // full-height button instead of wrapping as chips, the way ChipGroup's own
+  // .row does everywhere else in the app.
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   hint: { ...type.caption, color: colors.taupe, marginTop: spacing.xs },
   footnote: { ...type.caption, color: colors.taupe, marginTop: spacing.md },
 });

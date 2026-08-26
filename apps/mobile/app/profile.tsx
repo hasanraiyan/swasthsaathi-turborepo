@@ -15,7 +15,7 @@ import { Screen } from '../components/ui/Screen';
 import { ErrorNotice, Loading } from '../components/ui/States';
 import { useAdherence } from '../lib/adherence';
 import { useHealthSnapshot, useProfile, useUpdateProfile } from '../lib/queries';
-import { colors, spacing, type } from '../theme';
+import { colors, radii, spacing, type } from '../theme';
 
 /**
  * The user's own details, plus how they've been doing.
@@ -183,7 +183,7 @@ function AdherenceCard({
 const styles = StyleSheet.create({
   summary: {
     backgroundColor: colors.pine,
-    borderRadius: 16,
+    borderRadius: radii.input,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
