@@ -6,9 +6,8 @@ import { EventType } from '@ag-ui/core';
  * The vocabulary comes from `@ag-ui/core` so a standard AG-UI client can read
  * the stream without knowing anything about Swasthya Saathi. Only the subset
  * that a single agent with tools actually produces is built here -- there are
- * no subagents, no shared state document and no human-in-the-loop graph, so
- * the `STEP_*`, `STATE_DELTA` and `ACTIVITY_*` families are deliberately
- * unused rather than emitted empty.
+ * no subagents and no steps worth naming, so the `STEP_*` and `ACTIVITY_*`
+ * families are deliberately unused rather than emitted empty.
  */
 export interface AguiEvent {
   type: EventType;
@@ -94,6 +93,22 @@ export const confirmationRequired = (
  */
 export const stateSnapshot = (files: unknown, todos: unknown): AguiEvent =>
   event(EventType.STATE_SNAPSHOT, { snapshot: { files, todos } });
+
+/**
+ * One part of the workspace changed, mid-run.
+ *
+ * A patch rather than a snapshot because a snapshot replaces the whole state:
+ * announcing a new plan that way would blank the files the agent had already
+ * written, and announcing a new file would blank the plan. `add` rather than
+ * `replace` since the client may not hold the key yet, and on a key it does
+ * hold `add` overwrites -- `replace` on a missing path is invalid and would
+ * be dropped.
+ */
+export const stateDelta = (
+  path: '/files' | '/todos',
+  value: unknown,
+): AguiEvent =>
+  event(EventType.STATE_DELTA, { delta: [{ op: 'add', path, value }] });
 
 /** The agent asking the app to open a file it just wrote. */
 export const filePresented = (

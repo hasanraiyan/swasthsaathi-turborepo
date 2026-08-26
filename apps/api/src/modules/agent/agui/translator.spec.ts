@@ -1,4 +1,4 @@
-import { AguiTranslator, textOf } from './translator';
+import { AguiTranslator } from './translator';
 import { EventType } from '@ag-ui/core';
 
 /**
@@ -91,9 +91,7 @@ describe('AguiTranslator', () => {
           event: 'on_chat_model_stream',
           data: {
             chunk: {
-              tool_call_chunks: [
-                { id: 'call_1', name: 'test', args: '{"a":' },
-              ],
+              tool_call_chunks: [{ id: 'call_1', name: 'test', args: '{"a":' }],
             },
           },
         }),
@@ -115,6 +113,128 @@ describe('AguiTranslator', () => {
     });
   });
 
+  describe('tools that change state', () => {
+    /**
+     * `write_todos` and the file tools do not return their result. They
+     * return a LangGraph `Command` carrying the new state and the message
+     * describing it, so a plain reading of the output finds neither -- which
+     * is how the plan came to appear only once the run had finished.
+     */
+    function writeTodosCommand(todos: unknown) {
+      return {
+        event: 'on_tool_end',
+        name: 'write_todos',
+        data: {
+          output: {
+            lg_name: 'Command',
+            update: {
+              todos,
+              messages: [
+                { tool_call_id: 'call_1', content: 'Updated todo list' },
+              ],
+            },
+          },
+        },
+      };
+    }
+
+    it('reports the result the Command carries, not the Command', () => {
+      const translator = new AguiTranslator();
+      collectEvents(
+        translator.translate({
+          event: 'on_chat_model_stream',
+          data: {
+            chunk: {
+              tool_call_chunks: [
+                { id: 'call_1', name: 'write_todos', args: '{}' },
+              ],
+            },
+          },
+        }),
+      );
+
+      const events = collectEvents(translator.translate(writeTodosCommand([])));
+
+      const result = events.find((e) => e.type === EventType.TOOL_CALL_RESULT);
+      expect(result?.toolCallId).toBe('call_1');
+      expect(result?.content).toBe('Updated todo list');
+    });
+
+    it('announces the new plan as it is written, not after the run', () => {
+      const translator = new AguiTranslator();
+
+      const events = collectEvents(
+        translator.translate(
+          writeTodosCommand([
+            { content: 'Read the appointment', status: 'completed' },
+            { content: 'Check blood pressure', status: 'in_progress' },
+          ]),
+        ),
+      );
+
+      const delta = events.find((e) => e.type === EventType.STATE_DELTA);
+      expect(delta?.delta).toEqual([
+        {
+          op: 'add',
+          path: '/todos',
+          value: [
+            { content: 'Read the appointment', status: 'completed' },
+            { content: 'Check blood pressure', status: 'in_progress' },
+          ],
+        },
+      ]);
+    });
+
+    it('patches the plan alone, leaving files the run already wrote', () => {
+      const translator = new AguiTranslator();
+      const events = collectEvents(translator.translate(writeTodosCommand([])));
+
+      // A snapshot here would replace the whole state, blanking the files.
+      expect(events.some((e) => e.type === EventType.STATE_SNAPSHOT)).toBe(
+        false,
+      );
+      const paths = events
+        .filter((e) => e.type === EventType.STATE_DELTA)
+        .flatMap((e) =>
+          (e.delta as Array<{ path: string }>).map((op) => op.path),
+        );
+      expect(paths).toEqual(['/todos']);
+    });
+
+    it('reports a written file in the shape the app is given', () => {
+      const translator = new AguiTranslator();
+
+      const events = collectEvents(
+        translator.translate({
+          event: 'on_tool_end',
+          name: 'write_file',
+          data: {
+            output: {
+              lg_name: 'Command',
+              update: {
+                files: {
+                  '/workspace/notes.md': { content: '# Notes' },
+                  '/skills/explaining/SKILL.md': { content: 'read only' },
+                },
+                messages: [{ tool_call_id: 'call_2', content: 'Wrote file' }],
+              },
+            },
+          },
+        }),
+      );
+
+      const delta = events.find((e) => e.type === EventType.STATE_DELTA);
+      expect(delta?.delta).toEqual([
+        {
+          op: 'add',
+          path: '/files',
+          // Skills are the agent's own reference, not the user's workspace.
+          value: [{ path: '/workspace/notes.md', content: '# Notes', size: 7 }],
+        },
+      ]);
+    });
+  });
+
   describe('tool end', () => {
     it('on_tool_end emits TOOL_CALL_RESULT with the right toolCallId', () => {
       const translator = new AguiTranslator();
@@ -125,9 +245,7 @@ describe('AguiTranslator', () => {
           event: 'on_chat_model_stream',
           data: {
             chunk: {
-              tool_call_chunks: [
-                { id: 'call_1', name: 'test', args: '{}' },
-              ],
+              tool_call_chunks: [{ id: 'call_1', name: 'test', args: '{}' }],
             },
           },
         }),
@@ -146,9 +264,7 @@ describe('AguiTranslator', () => {
       );
 
       // Should have TOOL_CALL_END and TOOL_CALL_RESULT
-      const endEvent = events.find(
-        (e) => e.type === EventType.TOOL_CALL_END,
-      );
+      const endEvent = events.find((e) => e.type === EventType.TOOL_CALL_END);
       const resultEvent = events.find(
         (e) => e.type === EventType.TOOL_CALL_RESULT,
       );
@@ -206,9 +322,7 @@ describe('AguiTranslator', () => {
 
       const events = collectEvents(translator.finish());
 
-      const textEnd = events.find(
-        (e) => e.type === EventType.TEXT_MESSAGE_END,
-      );
+      const textEnd = events.find((e) => e.type === EventType.TEXT_MESSAGE_END);
       expect(textEnd).toBeDefined();
     });
 
@@ -221,9 +335,7 @@ describe('AguiTranslator', () => {
           event: 'on_chat_model_stream',
           data: {
             chunk: {
-              tool_call_chunks: [
-                { id: 'call_1', name: 'test', args: '{}' },
-              ],
+              tool_call_chunks: [{ id: 'call_1', name: 'test', args: '{}' }],
             },
           },
         }),
@@ -231,28 +343,8 @@ describe('AguiTranslator', () => {
 
       const events = collectEvents(translator.finish());
 
-      const toolEnd = events.find(
-        (e) => e.type === EventType.TOOL_CALL_END,
-      );
+      const toolEnd = events.find((e) => e.type === EventType.TOOL_CALL_END);
       expect(toolEnd).toBeDefined();
     });
-  });
-});
-
-describe('textOf', () => {
-  it('returns the string directly for string content', () => {
-    expect(textOf('hello')).toBe('hello');
-  });
-
-  it('extracts text from block array', () => {
-    expect(textOf([{ text: 'a' }, { text: 'b' }])).toBe('ab');
-  });
-
-  it('returns empty string for null', () => {
-    expect(textOf(null)).toBe('');
-  });
-
-  it('returns empty string for non-string non-array', () => {
-    expect(textOf(42)).toBe('');
   });
 });

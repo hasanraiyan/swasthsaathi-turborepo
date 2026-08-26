@@ -5,8 +5,6 @@ import { Command } from '@langchain/langgraph';
 import { DEFAULT_SESSION_TITLE } from '@repo/contracts';
 import type {
   Actor,
-  AgentFile,
-  AgentTodo,
   PendingApproval,
   ResumeAgentInput,
   RunAgentInput,
@@ -27,7 +25,8 @@ import {
   stateSnapshot,
   type AguiEvent,
 } from './agui/events';
-import { AguiTranslator, textOf } from './agui/translator';
+import { textOf, toFiles, toTodos } from './agui/state';
+import { AguiTranslator } from './agui/translator';
 import { fromToolName } from './llm/tool-adapter';
 import { AgentFactory } from './llm/agent.factory';
 import { ModelFactory } from './llm/model.factory';
@@ -357,41 +356,6 @@ export function normalizeTurns(raw: StoredMessage[]): TranscriptTurn[] {
 }
 
 /** The agent's workspace, minus directories and its own skill files. */
-function toFiles(raw: unknown): AgentFile[] {
-  if (!raw || typeof raw !== 'object') {
-    return [];
-  }
-  const files: AgentFile[] = [];
-
-  for (const [path, data] of Object.entries(raw as Record<string, unknown>)) {
-    if (path.startsWith('/skills/') || path.endsWith('/')) {
-      continue;
-    }
-    const entry = data as {
-      content?: unknown;
-      is_dir?: boolean;
-      isDir?: boolean;
-    };
-    if (entry?.is_dir === true || entry?.isDir === true) {
-      continue;
-    }
-    const content = textOf(entry?.content);
-    files.push({ path, content, size: content.length });
-  }
-
-  return files;
-}
-
-function toTodos(raw: unknown): AgentTodo[] {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw.map((todo: { content?: unknown; status?: unknown }) => ({
-    content: typeof todo?.content === 'string' ? todo.content : '',
-    status: typeof todo?.status === 'string' ? todo.status : 'pending',
-  }));
-}
-
 /**
  * The write the graph stopped on, if it is still waiting.
  *

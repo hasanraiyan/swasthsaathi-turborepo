@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   filePresented,
   runError,
+  stateDelta,
   textMessageContent,
   textMessageEnd,
   textMessageStart,
@@ -12,6 +13,7 @@ import {
   toolCallStart,
   type AguiEvent,
 } from './events';
+import { commandUpdate, messageOf, textOf, toFiles, toTodos } from './state';
 
 /**
  * Turns a LangGraph event stream into AG-UI events.
@@ -103,18 +105,35 @@ export class AguiTranslator {
     }
   }
 
+  /**
+   * A tool finished: report its result, and anything it changed.
+   *
+   * The tools that write to the agent's own state -- the plan, the files it
+   * is drafting -- return a `Command` holding both the new state and the
+   * message describing it, rather than the message alone. Unwrapping it is
+   * what lets the plan appear as the agent works through it, instead of
+   * arriving complete once there is nothing left to watch.
+   */
   private *onToolEnd(data: unknown): Generator<AguiEvent> {
-    const output = (
-      data as { output?: { tool_call_id?: string; content?: unknown } }
-    )?.output;
+    const raw = (data as { output?: unknown })?.output;
+    const update = commandUpdate(raw);
+    const output = (update ? messageOf(update) : raw) as
+      { tool_call_id?: string; content?: unknown } | undefined;
+
     const toolCallId = output?.tool_call_id;
-    if (!toolCallId) {
-      return;
+    if (toolCallId) {
+      if (this.openToolCalls.delete(toolCallId)) {
+        yield toolCallEnd(toolCallId);
+      }
+      yield toolCallResult(randomUUID(), toolCallId, textOf(output?.content));
     }
-    if (this.openToolCalls.delete(toolCallId)) {
-      yield toolCallEnd(toolCallId);
+
+    if (update?.todos !== undefined) {
+      yield stateDelta('/todos', toTodos(update.todos));
     }
-    yield toolCallResult(randomUUID(), toolCallId, textOf(output?.content));
+    if (update?.files !== undefined) {
+      yield stateDelta('/files', toFiles(update.files));
+    }
   }
 
   private *onFilePresented(data: unknown): Generator<AguiEvent> {
@@ -149,21 +168,4 @@ export class AguiTranslator {
 interface ModelChunk {
   content?: unknown;
   tool_call_chunks?: Array<{ id?: string; name?: string; args?: string }>;
-}
-
-/** Content is a string for plain text and a block array once tools appear. */
-export function textOf(content: unknown): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .map((block) =>
-      typeof block === 'object' && block !== null && 'text' in block
-        ? String((block as { text: unknown }).text)
-        : '',
-    )
-    .join('');
 }

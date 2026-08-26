@@ -39,6 +39,13 @@ export function ToolTrace({ call, onOpenFile }: ToolTraceProps) {
     }
   }
 
+  // The plan is already drawn as a checklist that updates as the agent works
+  // through it. A row saying it was written again says nothing the reader
+  // cannot already see.
+  if (call.toolName === 'write_todos') {
+    return null;
+  }
+
   const pending = call.result === null;
   const label = describe(call.toolName);
 
