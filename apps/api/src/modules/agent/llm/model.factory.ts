@@ -45,6 +45,11 @@ export class ModelFactory implements OnModuleInit {
     return Boolean(this.config.get<string>('OPENAI_API_KEY'));
   }
 
+  private number(key: string, fallback: number): number {
+    const value = Number(this.config.get<string>(key));
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  }
+
   /** Only set when pointed elsewhere, so the OpenAI default stays untouched. */
   private clientOptions():
     { configuration: { baseURL: string } } | Record<string, never> {
@@ -69,6 +74,9 @@ export class ModelFactory implements OnModuleInit {
       apiKey: this.apiKey(),
       temperature: 0.3,
       streaming: true,
+      // Generous: a hosted gateway can take tens of seconds for a tool call,
+      // and cutting off a real answer is worse than waiting for it.
+      timeout: this.number('AGENT_CHAT_TIMEOUT_MS', 180_000),
       ...this.clientOptions(),
     });
   }
@@ -80,6 +88,9 @@ export class ModelFactory implements OnModuleInit {
       apiKey: this.apiKey(),
       temperature: 0.2,
       maxTokens: 24,
+      // Short on purpose. Naming a chat is a nicety; it must never be the
+      // reason someone waits, and an untitled session costs nothing.
+      timeout: this.number('AGENT_TITLE_TIMEOUT_MS', 15_000),
       ...this.clientOptions(),
     });
   }

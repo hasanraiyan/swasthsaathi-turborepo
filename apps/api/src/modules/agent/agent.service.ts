@@ -35,6 +35,14 @@ import { TitleService } from './llm/title.service';
 import { RunLimiter } from './run-limiter.service';
 import { SessionService } from './sessions/session.service';
 
+/**
+ * How long a finished run will wait for the conversation's name.
+ *
+ * Small deliberately: the answer is already written by this point, and the
+ * title is worth nothing next to the stream staying open.
+ */
+const TITLE_GRACE_MS = 1_500;
+
 /** One reply at a time per person -- an SSE stream each is enough to hurt. */
 const activeRuns = new Set<string>();
 
@@ -155,8 +163,19 @@ export class AgentService {
 
       let titleWork: Promise<string | null> | null = null;
       if ('message' in start && session.title === DEFAULT_SESSION_TITLE) {
-        // Alongside the answer, so naming never delays it.
-        titleWork = this.titles.generate(start.message);
+        // Runs alongside the answer, and saves itself when it lands. Doing
+        // the save inside the promise rather than after awaiting it means a
+        // slow title still names the session, even if the run has already
+        // finished and nobody is listening any more.
+        titleWork = this.titles
+          .generate(start.message)
+          .then(async (title) =>
+            title &&
+            (await this.sessions.retitleIfUntouched(actor, session.id, title))
+              ? title
+              : null,
+          )
+          .catch(() => null);
       }
 
       const agent = this.agents.build(actor, this.confirmsWrites);
@@ -195,11 +214,17 @@ export class AgentService {
       await this.sessions.touch(actor, session.id);
 
       if (titleWork) {
-        const title = await titleWork;
-        if (
-          title &&
-          (await this.sessions.retitleIfUntouched(actor, session.id, title))
-        ) {
+        // Announce it only if it is already there. Waiting on a title after
+        // the answer is written would hold the stream open for no reason --
+        // the very delay running it in parallel was meant to avoid. If it is
+        // late it still saves, and the client sees it next time it lists.
+        const title = await Promise.race([
+          titleWork,
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), TITLE_GRACE_MS),
+          ),
+        ]);
+        if (title) {
           yield sessionTitled(session.id, title);
         }
       }
