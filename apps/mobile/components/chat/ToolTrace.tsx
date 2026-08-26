@@ -1,17 +1,31 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { TranscriptToolCall } from '@repo/contracts';
+import type {
+  AdherenceSummary,
+  DaySchedule,
+  HealthSnapshot,
+  MeasurementTrend,
+  PreventivePlan,
+  TranscriptToolCall,
+} from '@repo/contracts';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { diffLines, diffStat } from '../../lib/diff';
+import { summarizerFor } from '../../lib/domain-records';
 import { basename } from '../../lib/file-tool-results';
 import { humanize } from '../../lib/format';
 import { colors, radii, spacing, statusColors, type } from '../../theme';
 import { FilePresentCard } from './FilePresentCard';
 import { JsonTree } from './JsonTree';
+import { AdherenceCard } from './tool-cards/AdherenceCard';
+import { DoseDayCard } from './tool-cards/DoseDayCard';
 import { FileDiffCard } from './tool-cards/FileDiffCard';
 import { LsResultCard } from './tool-cards/LsResultCard';
+import { MeasurementTrendCard } from './tool-cards/MeasurementTrendCard';
+import { HealthSnapshotCard, PreventionPlanCard } from './tool-cards/PreventionCards';
 import { ReadFileCard } from './tool-cards/ReadFileCard';
+import { RecordListCard } from './tool-cards/RecordListCard';
+import { RecordRow } from './tool-cards/RecordRow';
 
 interface ToolTraceProps {
   call: TranscriptToolCall;
@@ -103,7 +117,9 @@ export function ToolTrace({ call, onOpenFile }: ToolTraceProps) {
         <Feather name={open ? 'chevron-up' : 'chevron-down'} size={12} color={colors.hairline} />
       </Pressable>
 
-      {open ? <View style={styles.detail}>{fileToolBody(call) ?? genericBody(call)}</View> : null}
+      {open ? (
+        <View style={styles.detail}>{fileToolBody(call) ?? domainBody(call) ?? genericBody(call)}</View>
+      ) : null}
     </View>
   );
 }
@@ -175,6 +191,46 @@ function fileToolBody(call: TranscriptToolCall) {
       );
     default:
       return null;
+  }
+}
+
+/**
+ * A domain capability's own result, shown the way the rest of the app shows
+ * that data -- not everything gets there: below the two data shapes this
+ * checks by name, only a result with more than a bare `{ id }` (what
+ * `.delete` returns) is worth a record row over the generic JSON view.
+ */
+function domainBody(call: TranscriptToolCall) {
+  if (typeof call.result !== 'string') {
+    return null;
+  }
+  const parsed = tryParseJson(call.result);
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  const data = parsed as Record<string, unknown>;
+
+  switch (call.toolName) {
+    case 'measurements.trend':
+      return <MeasurementTrendCard trend={data as unknown as MeasurementTrend} />;
+    case 'medicationDoses.day':
+      return <DoseDayCard schedule={data as unknown as DaySchedule} />;
+    case 'medicationDoses.adherence':
+      return <AdherenceCard summary={data as unknown as AdherenceSummary} />;
+    case 'prevention.plan':
+      return <PreventionPlanCard plan={data as unknown as PreventivePlan} />;
+    case 'prevention.snapshot':
+      return <HealthSnapshotCard snapshot={data as unknown as HealthSnapshot} />;
+    default: {
+      const summarize = summarizerFor(call.toolName);
+      if (!summarize) {
+        return null;
+      }
+      if (Array.isArray(data.items)) {
+        return <RecordListCard toolName={call.toolName} items={data.items} />;
+      }
+      return Object.keys(data).length > 1 ? <RecordRow summary={summarize(data)} /> : null;
+    }
   }
 }
 
