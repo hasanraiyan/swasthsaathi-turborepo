@@ -29,14 +29,25 @@ import { colors, spacing, type } from '../theme';
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { openDrawer } = useDrawer();
-  const { activeConversation, pending, draft, setDraft, sendMessage, newChat, fileAt } = useChat();
+  const {
+    activeConversation,
+    turns,
+    todos,
+    approvals,
+    answered,
+    pending,
+    error,
+    draft,
+    setDraft,
+    sendMessage,
+    answerApproval,
+    newChat,
+    fileAt,
+  } = useChat();
 
   const [openFile, setOpenFile] = useState<AgentFile | null>(null);
   const scroller = useRef<ScrollView>(null);
 
-  const turns = activeConversation?.turns ?? [];
-  const todos = activeConversation?.todos ?? [];
-  const approvals = activeConversation?.pendingApprovals ?? [];
   const isEmpty = turns.length === 0;
 
   return (
@@ -105,11 +116,20 @@ export default function ChatScreen() {
                   key={`${approval.index}-${approval.toolName}`}
                   toolName={approval.toolName}
                   description={approval.description}
-                  onApprove={() => undefined}
-                  onReject={() => undefined}
-                  busy={false}
+                  onApprove={() => answerApproval(approval.index, { type: 'approve' })}
+                  onReject={() =>
+                    answerApproval(approval.index, {
+                      type: 'reject',
+                      message: 'I would rather you did not do that.',
+                    })
+                  }
+                  // Answered, but still waiting on the others before the run
+                  // can be resumed.
+                  busy={pending || answered.includes(approval.index)}
                 />
               ))}
+
+              {error ? <ErrorNotice message={error} /> : null}
             </View>
           )}
         </ScrollView>
@@ -136,16 +156,26 @@ export default function ChatScreen() {
 function EmptyChat({ onAsk }: { onAsk: (prompt: string) => void }) {
   return (
     <View>
-      <View style={styles.badge}>
-        <Feather name="clock" size={12} color={colors.marigoldText} />
-        <Text style={styles.badgeText}>Preview — the assistant isn&apos;t connected yet</Text>
-      </View>
-
       <Text style={styles.emptyTitle}>Your health, at a glance</Text>
 
       <View style={styles.cards}>
         <IntentCards onAsk={onAsk} />
       </View>
+    </View>
+  );
+}
+
+/**
+ * A run that could not finish.
+ *
+ * In the thread rather than as a toast: it is the answer to what was just
+ * asked, and it should stay visible next to the question it belongs to.
+ */
+function ErrorNotice({ message }: { message: string }) {
+  return (
+    <View style={styles.error}>
+      <Feather name="alert-circle" size={14} color={colors.marigoldText} />
+      <Text style={styles.errorText}>{message}</Text>
     </View>
   );
 }
@@ -168,20 +198,14 @@ const styles = StyleSheet.create({
   content: { paddingVertical: spacing.lg, flexGrow: 1 },
   contentEmpty: { justifyContent: 'center' },
   thread: { paddingHorizontal: spacing.lg },
-  badge: {
+  error: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
     gap: spacing.xs + 2,
-    marginHorizontal: spacing.lg,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
   },
-  badgeText: { ...type.caption, color: colors.marigoldText, fontWeight: '600' },
+  errorText: { ...type.body, color: colors.marigoldText, flex: 1 },
   emptyTitle: {
     ...type.display,
     color: colors.ink,

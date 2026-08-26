@@ -1,158 +1,329 @@
-import type { AgentFile, AgentTodo, PendingApproval, TranscriptTurn } from '@repo/contracts';
+import { useAuth } from '@clerk/expo';
+import type {
+  AgentFile,
+  AgentTodo,
+  ChatSession,
+  ListResult,
+  PendingApproval,
+  SessionState,
+  TranscriptTurn,
+} from '@repo/contracts';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { SwasthyaAgent, turnsFrom, workspaceFrom, type ApprovalDecision } from './agent';
+import { ApiError, createApiClient } from './api';
+
 /**
- * Chat state for the interface, ahead of the stream being wired up.
+ * The chat, as the app holds it.
  *
- * The shapes are the real ones from `@repo/contracts` -- `TranscriptTurn`,
- * `AgentFile`, `AgentTodo`, `PendingApproval` -- so connecting
- * `POST /api/agent/run` later replaces where this data comes from without
- * touching a single component.
+ * Two sources, kept deliberately apart. `GET /sessions/:id/messages` gives the
+ * conversation as it was left, and the AG-UI agent gives what has happened
+ * since -- so the thread is the restored turns followed by the live ones, and
+ * neither has to be reconciled against the other.
  */
 
+/** A conversation in the drawer. */
 export interface Conversation {
   id: string;
   title: string;
-  turns: TranscriptTurn[];
-  todos: AgentTodo[];
-  files: AgentFile[];
-  pendingApprovals: PendingApproval[];
   updatedAt: string;
 }
 
 interface ChatContextValue {
   conversations: Conversation[];
-  activeConversation: Conversation | null;
+  activeConversation: (Conversation & { turns: TranscriptTurn[] }) | null;
+  turns: TranscriptTurn[];
+  todos: AgentTodo[];
+  approvals: PendingApproval[];
+  /** Approvals already answered, waiting on the rest before resuming. */
+  answered: number[];
   pending: boolean;
+  error: string | null;
   draft: string;
   setDraft: (value: string) => void;
   sendMessage: (text: string) => void;
+  answerApproval: (index: number, decision: ApprovalDecision) => void;
   newChat: () => void;
   selectConversation: (id: string) => void;
-  /** Look a file up by the path a `present_file` card carries. */
   fileAt: (filePath: string) => AgentFile | null;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
-const NOT_CONNECTED =
-  "The assistant isn't connected yet. Your message is kept on this device so the chat can be tried out — nothing is sent anywhere.";
-
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const [conversations, setConversations] = useState<Conversation[]>(mockConversations);
+  const { getToken, isSignedIn } = useAuth();
+  const api = useMemo(() => createApiClient(() => getToken()), [getToken]);
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(
-    () => () => {
-      if (replyTimer.current) {
-        clearTimeout(replyTimer.current);
-      }
-    },
-    [],
-  );
+  // What the server had, and what has happened since, held separately.
+  const [restored, setRestored] = useState<TranscriptTurn[]>([]);
+  const [live, setLive] = useState<TranscriptTurn[]>([]);
+  const [files, setFiles] = useState<AgentFile[]>([]);
+  const [todos, setTodos] = useState<AgentTodo[]>([]);
+  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [answers, setAnswers] = useState<Record<number, ApprovalDecision>>({});
 
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeId) ?? null,
-    [conversations, activeId],
-  );
+  const agentRef = useRef<SwasthyaAgent | null>(null);
+  // Which conversation is open, readable from inside a run that is already
+  // under way -- state would be the value captured when the run started.
+  const activeIdRef = useRef<string | null>(null);
+
+  const setActive = useCallback((id: string | null) => {
+    activeIdRef.current = id;
+    setActiveId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<ListResult<ChatSession>>('/sessions', { limit: 50 })
+      .then((result) => {
+        if (!cancelled) {
+          setConversations(result.items.map(toConversation));
+        }
+      })
+      .catch(() => {
+        // A failed list leaves the drawer empty; it is not worth interrupting
+        // someone who only wants to ask a question.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, isSignedIn]);
+
+  /** Everything that belongs to one conversation, cleared together. */
+  const resetThread = useCallback(() => {
+    agentRef.current?.abortRun();
+    agentRef.current = null;
+    setRestored([]);
+    setLive([]);
+    setFiles([]);
+    setTodos([]);
+    setApprovals([]);
+    setAnswers({});
+    setPending(false);
+    setError(null);
+    setDraft('');
+  }, []);
 
   const newChat = useCallback(() => {
-    setActiveId(null);
-    setDraft('');
-    setPending(false);
+    resetThread();
+    setActive(null);
+  }, [resetThread, setActive]);
+
+  /**
+   * Wire an agent up to this component's state.
+   *
+   * Both `onNewMessage` and `onMessagesChanged` re-read the whole list:
+   * adding the user's own message fires only the first, and streamed replies
+   * only the second, so listening to one of them would leave the thread a
+   * turn behind.
+   */
+  const attach = useCallback((agent: SwasthyaAgent) => {
+    const sync = () => setLive(turnsFrom(agent.messages));
+    agent.subscribe({
+      onNewMessage: sync,
+      onMessagesChanged: sync,
+      onStateChanged: () => {
+        const workspace = workspaceFrom(agent.state);
+        setFiles(workspace.files);
+        setTodos(workspace.todos);
+      },
+      onCustomEvent: ({ event }) => {
+        if (event.name === 'tool.confirmation_required') {
+          setApprovals((current) => [...current, event.value as PendingApproval]);
+        }
+        if (event.name === 'session.title') {
+          const { sessionId, title } = event.value as { sessionId: string; title: string };
+          setConversations((current) =>
+            current.map((item) => (item.id === sessionId ? { ...item, title } : item)),
+          );
+        }
+      },
+      // A run that fails ends by resolving, not by throwing, so this is the
+      // only place a rate limit or a model failure can be caught.
+      onRunErrorEvent: ({ event }) => setError(event.message),
+    });
+    return agent;
   }, []);
 
-  const selectConversation = useCallback((id: string) => {
-    setActiveId(id);
-    setDraft('');
-    setPending(false);
-  }, []);
+  /**
+   * Take the conversation from the server.
+   *
+   * Also run once a stream settles, which is what keeps a live answer and the
+   * same answer after a reload identical: the API merges an assistant's
+   * messages and folds each tool result onto its call, and a resumed run
+   * carries a result whose call was made before the stream even opened. The
+   * agent is dropped at the same time, since what it was holding has just
+   * become part of the restored conversation.
+   */
+  const refresh = useCallback(
+    async (sessionId: string) => {
+      const state = await api.get<SessionState>(`/sessions/${sessionId}/messages`);
+      if (activeIdRef.current !== sessionId) {
+        // Moved on while this was in flight -- starting a new chat during an
+        // answer must not pull the old conversation back onto the screen.
+        return;
+      }
+      agentRef.current = null;
+      setLive([]);
+      setRestored(state.messages);
+      setFiles(state.files);
+      setTodos(state.todos);
+      // A conversation left waiting on a write is still waiting on it.
+      setApprovals(state.pendingApprovals);
+      setAnswers({});
+    },
+    [api],
+  );
 
-  const fileAt = useCallback(
-    (filePath: string) =>
-      conversations.flatMap((c) => c.files).find((file) => file.path === filePath) ?? null,
-    [conversations],
+  const selectConversation = useCallback(
+    (id: string) => {
+      resetThread();
+      setActive(id);
+      refresh(id).catch((cause: unknown) => setError(messageFor(cause)));
+    },
+    [refresh, resetThread, setActive],
+  );
+
+  /** The agent for the open conversation, made on first use. */
+  const agentFor = useCallback(
+    (sessionId: string) => {
+      if (!agentRef.current) {
+        agentRef.current = attach(new SwasthyaAgent(sessionId, () => getToken()));
+      }
+      return agentRef.current;
+    },
+    [attach, getToken],
   );
 
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed) {
+      if (!trimmed || pending) {
+        return;
+      }
+      setDraft('');
+      setError(null);
+      setPending(true);
+
+      void (async () => {
+        try {
+          // A new chat becomes a real session before the first message, so
+          // the run has somewhere to be checkpointed and the drawer has a
+          // row to rename once the title lands.
+          let sessionId = activeId;
+          if (!sessionId) {
+            const session = await api.post<ChatSession>('/sessions', {});
+            sessionId = session.id;
+            setConversations((current) => [toConversation(session), ...current]);
+            setActive(session.id);
+          }
+
+          await agentFor(sessionId).ask(trimmed);
+          // Only on success: a failed read would otherwise wipe the answer
+          // that just arrived.
+          await refresh(sessionId).catch(() => undefined);
+        } catch (cause) {
+          setError(messageFor(cause));
+        } finally {
+          setPending(false);
+        }
+      })();
+    },
+    [activeId, agentFor, api, pending, refresh, setActive],
+  );
+
+  /**
+   * Record one answer, and resume once every pending write has one.
+   *
+   * The API takes a decision per pending action in the order they were
+   * offered. Sending as soon as the first button is pressed would answer the
+   * others by omission, so the run stays paused until the set is complete --
+   * which, for a single pending write, is immediately.
+   */
+  const answerApproval = useCallback(
+    (index: number, decision: ApprovalDecision) => {
+      const next = { ...answers, [index]: decision };
+      setAnswers(next);
+
+      const ordered = [...approvals].sort((a, b) => a.index - b.index);
+      if (!activeId || ordered.some((approval) => !next[approval.index])) {
         return;
       }
 
-      const now = new Date().toISOString();
-      const turn: TranscriptTurn = {
-        id: nextId('t'),
-        role: 'user',
-        content: trimmed,
-        toolCalls: [],
-      };
-
-      const conversationId = activeId ?? nextId('c');
-      setConversations((current) => {
-        const existing = current.find((c) => c.id === conversationId);
-        if (!existing) {
-          return [
-            {
-              id: conversationId,
-              title: titleFrom(trimmed),
-              turns: [turn],
-              todos: [],
-              files: [],
-              pendingApprovals: [],
-              updatedAt: now,
-            },
-            ...current,
-          ];
-        }
-        return current.map((c) =>
-          c.id === conversationId ? { ...c, turns: [...c.turns, turn], updatedAt: now } : c,
-        );
-      });
-      setActiveId(conversationId);
-      setDraft('');
       setPending(true);
-
-      // Stands in for the round trip so the waiting state is visible. It says
-      // plainly that nothing is connected -- it never invents an answer.
-      replyTimer.current = setTimeout(() => {
-        setConversations((current) =>
-          current.map((c) =>
-            c.id === conversationId
-              ? {
-                  ...c,
-                  turns: [
-                    ...c.turns,
-                    { id: nextId('t'), role: 'assistant', content: NOT_CONNECTED, toolCalls: [] },
-                  ],
-                }
-              : c,
-          ),
-        );
-        setPending(false);
-      }, 900);
+      setApprovals([]);
+      setAnswers({});
+      void (async () => {
+        try {
+          await agentFor(activeId).decide(ordered.map((approval) => next[approval.index]!));
+          await refresh(activeId).catch(() => undefined);
+        } catch (cause) {
+          setError(messageFor(cause));
+        } finally {
+          setPending(false);
+        }
+      })();
     },
-    [activeId],
+    [activeId, agentFor, answers, approvals, refresh],
+  );
+
+  const turns = useMemo(() => [...restored, ...live], [restored, live]);
+
+  const activeConversation = useMemo(() => {
+    const conversation = conversations.find((item) => item.id === activeId);
+    return conversation ? { ...conversation, turns } : null;
+  }, [conversations, activeId, turns]);
+
+  const fileAt = useCallback(
+    (filePath: string) => files.find((file) => file.path === filePath) ?? null,
+    [files],
   );
 
   const value = useMemo(
     () => ({
       conversations,
       activeConversation,
+      turns,
+      todos,
+      approvals,
+      answered: Object.keys(answers).map(Number),
       pending,
+      error,
       draft,
       setDraft,
       sendMessage,
+      answerApproval,
       newChat,
       selectConversation,
       fileAt,
     }),
-    [conversations, activeConversation, pending, draft, sendMessage, newChat, selectConversation, fileAt],
+    [
+      conversations,
+      activeConversation,
+      turns,
+      todos,
+      approvals,
+      answers,
+      pending,
+      error,
+      draft,
+      sendMessage,
+      answerApproval,
+      newChat,
+      selectConversation,
+      fileAt,
+    ],
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
@@ -189,156 +360,18 @@ export function groupConversations(
   return buckets.filter((bucket) => bucket.items.length > 0);
 }
 
-let counter = 0;
-function nextId(prefix: string): string {
-  counter += 1;
-  return `${prefix}_${Date.now().toString(36)}_${counter}`;
+/** Ordered by when it was last spoken in, not when the record changed. */
+function toConversation(session: ChatSession): Conversation {
+  return {
+    id: session.id,
+    title: session.title,
+    updatedAt: session.lastMessageAt ?? session.updatedAt,
+  };
 }
 
-function titleFrom(text: string): string {
-  const firstLine = text.split('\n')[0]!.trim();
-  return firstLine.length > 44 ? `${firstLine.slice(0, 44).trimEnd()}…` : firstLine;
+function messageFor(cause: unknown): string {
+  if (cause instanceof ApiError) {
+    return cause.userMessage;
+  }
+  return 'Something went wrong. Try again.';
 }
-
-function daysAgo(days: number, hour = 9): string {
-  const date = new Date(Date.now() - days * 86_400_000);
-  date.setHours(hour, 0, 0, 0);
-  return date.toISOString();
-}
-
-const APPOINTMENT_SHEET = `# Cardiology follow-up — 14 September
-
-## Why I am here
-Six-month review after starting Amlodipine.
-
-## What has changed
-- Blood pressure down from 148/94 to 128/82 across six readings
-- Two missed evening doses in the last month
-- Occasional ankle swelling in the evenings
-
-## What I am taking
-- Metformin 500 mg, twice a day, after food
-- Amlodipine 5 mg, once in the morning
-
-## What I want to ask
-1. Is the ankle swelling related to the Amlodipine?
-2. Should the evening Metformin move earlier?
-3. When is the next blood test due?
-`;
-
-/**
- * Placeholder history, written to exercise every part of the interface --
- * a tool trace, a produced file, a plan, and a pending approval. It goes away
- * with the first real stream.
- */
-const mockConversations: Conversation[] = [
-  {
-    id: 'c_mock_1',
-    title: 'Preparing for the cardiology visit',
-    updatedAt: daysAgo(0, 8),
-    todos: [
-      { content: 'Read the upcoming appointment', status: 'completed' },
-      { content: 'Check recent blood pressure readings', status: 'completed' },
-      { content: 'Write the summary sheet', status: 'in_progress' },
-      { content: 'Note questions to ask', status: 'pending' },
-    ],
-    files: [{ path: '/workspace/outputs/appointment-2026-09-14.md', content: APPOINTMENT_SHEET, size: APPOINTMENT_SHEET.length }],
-    pendingApprovals: [],
-    turns: [
-      {
-        id: 't1',
-        role: 'user',
-        content: 'I have a cardiology appointment next week. Can you help me get ready?',
-        toolCalls: [],
-      },
-      {
-        id: 't2',
-        role: 'assistant',
-        content:
-          'I have put together a page you can take with you. Your blood pressure has come down from 148/94 to 128/82 since starting Amlodipine, which is worth mentioning — as are the two evening doses you missed last month.',
-        toolCalls: [
-          {
-            toolCallId: 'call_1',
-            toolName: 'appointments.list',
-            args: { upcomingOnly: true },
-            result: '{"items":[{"title":"Cardiology follow-up","scheduledFor":"2026-09-14T10:30:00+05:30"}],"total":1}',
-            isError: false,
-          },
-          {
-            toolCallId: 'call_2',
-            toolName: 'measurements.trend',
-            args: { type: 'blood_pressure' },
-            result: '{"count":6,"average":128,"averageSecondary":82,"min":120,"max":138}',
-            isError: false,
-          },
-          {
-            toolCallId: 'call_3',
-            toolName: 'present_file',
-            args: {
-              filePath: '/workspace/outputs/appointment-2026-09-14.md',
-              title: 'Cardiology follow-up sheet',
-              description: 'One page to take with you on the 14th',
-            },
-            result: '{"presented":true}',
-            isError: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'c_mock_2',
-    title: 'How has my blood pressure been?',
-    updatedAt: daysAgo(3, 19),
-    todos: [],
-    files: [],
-    pendingApprovals: [],
-    turns: [
-      { id: 't3', role: 'user', content: 'How has my blood pressure been?', toolCalls: [] },
-      {
-        id: 't4',
-        role: 'assistant',
-        content:
-          'Your last six readings averaged 128/82, down from 136/88 the month before. That is a real improvement, and the kind of trend worth showing your doctor.',
-        toolCalls: [
-          {
-            toolCallId: 'call_4',
-            toolName: 'measurements.trend',
-            args: { type: 'blood_pressure', from: '2026-07-01' },
-            result: '{"count":6,"average":128,"averageSecondary":82}',
-            isError: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'c_mock_3',
-    title: 'Stopping the evening tablet',
-    updatedAt: daysAgo(11, 15),
-    todos: [],
-    files: [],
-    pendingApprovals: [
-      {
-        index: 0,
-        toolName: 'medicines.stop',
-        args: { id: '6a8dad11ef36036d8005955b', reason: 'Doctor advised stopping' },
-        description: 'Mark Metformin as stopped. Reminders stop; your history is kept.',
-      },
-    ],
-    turns: [
-      {
-        id: 't5',
-        role: 'user',
-        content: 'My doctor said to stop the evening Metformin.',
-        toolCalls: [],
-      },
-      {
-        id: 't6',
-        role: 'assistant',
-        content: 'I can mark that as stopped. It will keep everything you have already recorded.',
-        toolCalls: [],
-      },
-    ],
-  },
-];

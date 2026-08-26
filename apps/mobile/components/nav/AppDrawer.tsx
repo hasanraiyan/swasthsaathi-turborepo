@@ -252,8 +252,6 @@ function ConversationRow({
   active: boolean;
   onPress: () => void;
 }) {
-  const last = conversation.turns[conversation.turns.length - 1];
-
   return (
     <Pressable
       accessibilityRole="button"
@@ -263,14 +261,11 @@ function ConversationRow({
       style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.pressed]}
     >
       <View style={styles.rowText}>
+        {/* Title only: the session list is a list of names, and the API names
+            each conversation from its first message. */}
         <Text style={[styles.rowTitle, active && styles.rowTitleActive]} numberOfLines={1}>
           {conversation.title}
         </Text>
-        {last ? (
-          <Text style={styles.rowSnippet} numberOfLines={1}>
-            {last.content}
-          </Text>
-        ) : null}
       </View>
       <Text style={styles.rowTime}>{shortTime(conversation.updatedAt)}</Text>
     </Pressable>
@@ -368,6 +363,5 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowTitle: { ...type.body, color: colors.ink },
   rowTitleActive: { fontWeight: '600' },
-  rowSnippet: { ...type.caption, color: colors.taupe, marginTop: 1 },
   rowTime: { ...type.caption, color: colors.taupe },
 });
