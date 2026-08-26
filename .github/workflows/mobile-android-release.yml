@@ -33,6 +33,11 @@ jobs:
       # resolveBaseUrl()'s Metro-host guess, which is not reachable off the
       # dev machine's network.
       EXPO_PUBLIC_API_URL: https://f283-2401-4900-1686-2763-bdca-8fbe-9ecd-220a.ngrok-free.app/api
+      # Also inlined at bundle time, same as the API URL above. A publishable
+      # key is meant to be public -- pk_ vs sk_ is exactly that split -- so
+      # this is a plain value here rather than a secret. Without it the built
+      # app's ClerkProvider gets an empty key and sign-in fails outright.
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dXNlZnVsLWVzY2FyZ290LTEyMjUuY2xlcmsuYWNjb3VudHMuZGV2JA
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
