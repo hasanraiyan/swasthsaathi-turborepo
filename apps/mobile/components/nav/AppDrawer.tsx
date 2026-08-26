@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/expo';
 import Feather from '@expo/vector-icons/Feather';
 import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { GestureResponderEvent } from 'react-native';
 import {
   Animated,
   Modal,
@@ -10,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -17,7 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { groupConversations, useChat, type Conversation } from '../../lib/chat-store';
 import { NAV_SECTIONS, isSectionActive, useDrawer } from '../../lib/navigation';
-import { colors, radii, spacing, type } from '../../theme';
+import { colors, radii, spacing, statusColors, type, webOutlineReset } from '../../theme';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ThreadRule } from '../ui/ThreadRule';
 
 /**
@@ -57,7 +60,38 @@ function DrawerPanel() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
-  const { conversations, activeConversation, newChat, selectConversation } = useChat();
+  const {
+    conversations,
+    activeConversation,
+    newChat,
+    selectConversation,
+    renameConversation,
+    deleteConversation,
+  } = useChat();
+
+  // Which conversation's "..." menu is open, and which dialog (if any) it led
+  // to. One at a time -- a second menu opening always means the first closed.
+  const [menuFor, setMenuFor] = useState<Conversation | null>(null);
+  const [renaming, setRenaming] = useState<Conversation | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState<Conversation | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDelete() {
+    if (!deletingConversation) {
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteConversation(deletingConversation.id);
+      setDeletingConversation(null);
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete. Try again.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   // Roomy enough for a conversation title, never so wide it hides the page.
   const drawerWidth = Math.min(330, width * 0.86);
@@ -234,6 +268,7 @@ function DrawerPanel() {
                     conversation={conversation}
                     active={conversation.id === activeConversation?.id && pathname === '/'}
                     onPress={() => openConversation(conversation.id)}
+                    onMenu={() => setMenuFor(conversation)}
                   />
                 ))}
               </View>
@@ -241,6 +276,41 @@ function DrawerPanel() {
           )}
         </ScrollView>
       </Animated.View>
+
+      {menuFor ? (
+        <ConversationMenu
+          conversation={menuFor}
+          onClose={() => setMenuFor(null)}
+          onRename={() => {
+            setMenuFor(null);
+            setRenaming(menuFor);
+          }}
+          onDelete={() => {
+            setMenuFor(null);
+            setDeleteError(null);
+            setDeletingConversation(menuFor);
+          }}
+        />
+      ) : null}
+
+      {renaming ? (
+        <RenameDialog
+          conversation={renaming}
+          onClose={() => setRenaming(null)}
+          onRename={renameConversation}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        visible={deletingConversation !== null}
+        title="Delete this conversation?"
+        body={deleteError ?? "This can't be undone."}
+        confirmLabel="Delete"
+        destructive
+        busy={deleteBusy}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeletingConversation(null)}
+      />
     </View>
   );
 }
@@ -249,10 +319,12 @@ function ConversationRow({
   conversation,
   active,
   onPress,
+  onMenu,
 }: {
   conversation: Conversation;
   active: boolean;
   onPress: () => void;
+  onMenu: () => void;
 }) {
   return (
     <Pressable
@@ -270,7 +342,152 @@ function ConversationRow({
         </Text>
       </View>
       <Text style={styles.rowTime}>{shortTime(conversation.updatedAt)}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`More options for ${conversation.title}`}
+        hitSlop={8}
+        onPress={(event: GestureResponderEvent) => {
+          // Stops the tap from also opening the conversation underneath --
+          // real DOM click bubbling on web, not just RN's own responder.
+          event.stopPropagation();
+          onMenu();
+        }}
+        style={({ pressed }) => [styles.rowMenuButton, pressed && styles.pressed]}
+      >
+        <Feather name="more-horizontal" size={16} color={colors.taupe} />
+      </Pressable>
     </Pressable>
+  );
+}
+
+/** Rename or delete, for one conversation. */
+function ConversationMenu({
+  conversation,
+  onClose,
+  onRename,
+  onDelete,
+}: {
+  conversation: Conversation;
+  onClose: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.dialogOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Dismiss" onPress={onClose} />
+        <View style={styles.menuCard}>
+          <Text style={styles.menuTitle} numberOfLines={1}>
+            {conversation.title}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRename}
+            style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+          >
+            <Feather name="edit-2" size={16} color={colors.ink} />
+            <Text style={styles.menuRowLabel}>Rename</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onDelete}
+            style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+          >
+            <Feather name="trash-2" size={16} color={statusColors.missed.ink} />
+            <Text style={[styles.menuRowLabel, styles.menuRowDanger]}>Delete</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** A conversation's title, edited in place. */
+function RenameDialog({
+  conversation,
+  onClose,
+  onRename,
+}: {
+  conversation: Conversation;
+  onClose: () => void;
+  onRename: (id: string, title: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(conversation.title);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = value.trim();
+
+  async function save() {
+    if (!trimmed) {
+      return;
+    }
+    if (trimmed === conversation.title) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onRename(conversation.id, trimmed);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not rename. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={busy ? () => undefined : onClose}
+    >
+      <View style={styles.dialogOverlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessibilityLabel="Dismiss"
+          onPress={busy ? undefined : onClose}
+        />
+        <View style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Rename conversation</Text>
+          <TextInput
+            accessibilityLabel="Conversation title"
+            value={value}
+            onChangeText={setValue}
+            autoFocus
+            maxLength={200}
+            onSubmitEditing={() => void save()}
+            returnKeyType="done"
+            style={[styles.renameInput, webOutlineReset]}
+          />
+          {error ? <Text style={styles.dialogError}>{error}</Text> : null}
+          <View style={styles.dialogActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onClose}
+              disabled={busy}
+              style={({ pressed }) => [styles.dialogButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.dialogCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void save()}
+              disabled={busy || trimmed.length === 0}
+              style={({ pressed }) => [
+                styles.dialogButton,
+                styles.dialogConfirmButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.dialogConfirmText}>{busy ? 'Saving…' : 'Save'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -367,4 +584,59 @@ const styles = StyleSheet.create({
   rowTitle: { ...type.body, color: colors.ink },
   rowTitleActive: { fontWeight: '600' },
   rowTime: { ...type.caption, color: colors.taupe },
+  rowMenuButton: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+
+  dialogOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(43, 38, 32, 0.45)',
+    padding: spacing.lg,
+  },
+  menuCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.cream,
+    borderRadius: radii.input,
+    padding: spacing.md,
+  },
+  menuTitle: {
+    ...type.label,
+    color: colors.taupe,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.input - 4,
+  },
+  menuRowLabel: { ...type.body, color: colors.ink },
+  menuRowDanger: { color: statusColors.missed.ink },
+
+  renameInput: {
+    ...type.body,
+    color: colors.ink,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.input,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    marginTop: spacing.xs,
+  },
+  dialogError: { ...type.caption, color: statusColors.missed.ink, marginTop: spacing.xs },
+  dialogActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  dialogButton: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: radii.button },
+  dialogCancelText: { ...type.body, fontWeight: '600', color: colors.taupe },
+  dialogConfirmButton: { backgroundColor: colors.pine },
+  dialogConfirmText: { ...type.body, fontWeight: '600', color: colors.cream },
 });

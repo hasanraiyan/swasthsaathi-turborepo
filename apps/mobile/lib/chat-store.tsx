@@ -46,6 +46,10 @@ interface ChatContextValue {
   answerApproval: (index: number, decision: ApprovalDecision) => void;
   newChat: () => void;
   selectConversation: (id: string) => void;
+  /** Rejects on failure so the drawer's dialog can show it inline and stay open. */
+  renameConversation: (id: string, title: string) => Promise<void>;
+  /** Rejects on failure so the drawer's dialog can show it inline and stay open. */
+  deleteConversation: (id: string) => Promise<void>;
   fileAt: (filePath: string) => AgentFile | null;
 }
 
@@ -278,6 +282,65 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [activeId, agentFor, answers, approvals, refresh],
   );
 
+  /**
+   * Rename applies immediately and reverts if the server refuses it, so a
+   * flaky connection doesn't leave the drawer showing a title that was never
+   * actually saved.
+   */
+  const renameConversation = useCallback(
+    async (id: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) {
+        return;
+      }
+      const previous = conversations.find((item) => item.id === id)?.title;
+      setConversations((current) =>
+        current.map((item) => (item.id === id ? { ...item, title: trimmed } : item)),
+      );
+      try {
+        await api.patch(`/sessions/${id}/title`, { title: trimmed });
+      } catch (cause) {
+        if (previous !== undefined) {
+          setConversations((current) =>
+            current.map((item) => (item.id === id ? { ...item, title: previous } : item)),
+          );
+        }
+        throw new Error(messageFor(cause));
+      }
+    },
+    [api, conversations],
+  );
+
+  /**
+   * Delete removes it from the drawer immediately, and drops the open thread
+   * too if it was the one showing -- an unrecoverable action should look
+   * unrecoverable right away, not linger until a request comes back.
+   */
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      const removed = conversations.find((item) => item.id === id);
+      const wasActive = activeIdRef.current === id;
+
+      setConversations((current) => current.filter((item) => item.id !== id));
+      if (wasActive) {
+        resetThread();
+        setActive(null);
+      }
+
+      try {
+        await api.del(`/sessions/${id}`);
+      } catch (cause) {
+        if (removed) {
+          setConversations((current) =>
+            [...current, removed].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+          );
+        }
+        throw new Error(messageFor(cause));
+      }
+    },
+    [api, conversations, resetThread, setActive],
+  );
+
   const turns = useMemo(() => [...restored, ...live], [restored, live]);
 
   const activeConversation = useMemo(() => {
@@ -306,6 +369,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       answerApproval,
       newChat,
       selectConversation,
+      renameConversation,
+      deleteConversation,
       fileAt,
     }),
     [
@@ -322,6 +387,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       answerApproval,
       newChat,
       selectConversation,
+      renameConversation,
+      deleteConversation,
       fileAt,
     ],
   );
