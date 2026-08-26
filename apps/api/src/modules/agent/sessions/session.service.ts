@@ -4,39 +4,30 @@ import { DEFAULT_SESSION_TITLE } from '@repo/contracts';
 import type {
   Actor,
   ById,
-  ChatMessage as ChatMessageRecord,
   ChatSession as ChatSessionRecord,
   CreateSessionInput,
   DeleteResult,
-  ListMessagesInput,
   ListResult,
   ListSessionsInput,
-  MessageRole,
-  ToolCall,
   UpdateSessionTitleInput,
 } from '@repo/contracts';
 import type { Model } from 'mongoose';
 
 import { NotFoundError } from '../../../common/errors';
 import { OwnedCrudService } from '../../../database/owned-crud.service';
-import { ChatMessage } from '../../../database/schemas/chat-message.schema';
 import { ChatSession } from '../../../database/schemas/chat-session.schema';
 import { serializeAll } from '../../../database/serialize';
-
-export interface AppendMessageInput {
-  sessionId: string;
-  role: MessageRole;
-  content: string;
-  toolCalls?: ToolCall[];
-  toolCallId?: string | null;
-}
+import { AgentFactory } from '../llm/agent.factory';
 
 /**
- * Conversations and their turns.
+ * Conversations.
+ *
+ * A session record holds only what the graph does not: a title and when it
+ * was last used. The turns themselves live in the checkpointer, which is why
+ * deleting one has to reach in there as well.
  *
  * Deliberately not exposed as capabilities: the agent should answer within a
- * conversation, not manage the list of them. Session housekeeping belongs to
- * the person, through the app.
+ * conversation, not manage the list of them.
  */
 @Injectable()
 export class SessionService extends OwnedCrudService<
@@ -47,8 +38,7 @@ export class SessionService extends OwnedCrudService<
 
   constructor(
     @InjectModel(ChatSession.name) protected readonly model: Model<ChatSession>,
-    @InjectModel(ChatMessage.name)
-    private readonly messages: Model<ChatMessage>,
+    private readonly agents: AgentFactory,
   ) {
     super();
   }
@@ -65,7 +55,7 @@ export class SessionService extends OwnedCrudService<
     input: ListSessionsInput,
   ): Promise<ListResult<ChatSessionRecord>> {
     const [items, total] = await Promise.all([
-      // Sessions that have never been used sort by when they were made, so a
+      // A session that has never been used sorts by when it was made, so a
       // freshly created one still appears at the top.
       this.listOwned(actor, {
         sort: { lastMessageAt: -1, createdAt: -1 },
@@ -117,94 +107,37 @@ export class SessionService extends OwnedCrudService<
     return result.modifiedCount > 0;
   }
 
+  /**
+   * Delete a conversation, including what was said in it.
+   *
+   * The record alone is not the conversation -- every turn lives in the
+   * checkpointer under the same id. Dropping only the record would leave the
+   * whole transcript on disk indefinitely, which is not what someone
+   * deleting a health conversation expects or should have to accept.
+   */
   async remove(actor: Actor, { id }: ById): Promise<DeleteResult> {
-    // Ownership first, so a bad id can't delete a stranger's messages on the
-    // way to a 404.
+    // Ownership first, so a bad id can never clear someone else's history.
     await this.getOwned(actor, id);
-    await this.messages
-      .deleteMany({ userId: actor.userId, sessionId: this.objectId(id) })
-      .exec();
+    await this.agents.forgetThread(id);
     return this.deleteOwned(actor, id);
   }
 
   async clear(actor: Actor): Promise<{ deleted: number }> {
-    await this.messages.deleteMany({ userId: actor.userId }).exec();
-    const result = await this.model.deleteMany({ userId: actor.userId }).exec();
-    return { deleted: result.deletedCount ?? 0 };
-  }
-
-  // --- messages ----------------------------------------------------------
-
-  async listMessages(
-    actor: Actor,
-    input: ListMessagesInput,
-  ): Promise<ListResult<ChatMessageRecord>> {
-    // Reading a session's messages must prove the session is the caller's;
-    // the message query alone would happily scope to the wrong session.
-    await this.getOwned(actor, input.sessionId);
-    const filter = {
-      userId: actor.userId,
-      sessionId: this.objectId(input.sessionId),
-    };
-
-    const [docs, total] = await Promise.all([
-      this.messages
-        .find(filter)
-        .sort({ createdAt: 1 })
-        .skip(input.offset)
-        .limit(input.limit)
-        .lean()
-        .exec(),
-      this.messages.countDocuments(filter).exec(),
-    ]);
-
-    return {
-      items: serializeAll<ChatMessageRecord>(docs),
-      total,
-      limit: input.limit,
-      offset: input.offset,
-    };
-  }
-
-  /** Append a turn and mark the session as active. */
-  async appendMessage(
-    actor: Actor,
-    input: AppendMessageInput,
-  ): Promise<ChatMessageRecord> {
-    const sessionId = this.objectId(input.sessionId, 'sessionId');
-    const created = await new this.messages({
-      userId: actor.userId,
-      sessionId,
-      role: input.role,
-      content: input.content,
-      toolCalls: input.toolCalls ?? [],
-      toolCallId: input.toolCallId ?? null,
-    }).save();
-
-    await this.model
-      .updateOne(
-        { _id: sessionId, userId: actor.userId },
-        { $set: { lastMessageAt: new Date() } },
-      )
-      .exec();
-
-    return serializeAll<ChatMessageRecord>([created.toObject()])[0];
-  }
-
-  /** The whole conversation, oldest first, for replaying to the model. */
-  async transcript(
-    actor: Actor,
-    sessionId: string,
-  ): Promise<ChatMessageRecord[]> {
-    const docs = await this.messages
-      .find({
-        userId: actor.userId,
-        sessionId: this.objectId(sessionId, 'sessionId'),
-      })
-      .sort({ createdAt: 1 })
+    const owned = await this.model
+      .find({ userId: actor.userId })
+      .select('_id')
       .lean()
       .exec();
-    return serializeAll<ChatMessageRecord>(docs);
+
+    // Sequential rather than parallel: this is rare and not urgent, and
+    // firing one checkpointer delete per session at once would spike the
+    // connection pool for no benefit.
+    for (const session of owned) {
+      await this.agents.forgetThread(String(session._id));
+    }
+
+    const result = await this.model.deleteMany({ userId: actor.userId }).exec();
+    return { deleted: result.deletedCount ?? 0 };
   }
 
   /** Resolve the session to run in, creating one when none was given. */

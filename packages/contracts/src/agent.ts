@@ -21,36 +21,18 @@ import {
 /** Title a session carries until the first message names it. */
 export const DEFAULT_SESSION_TITLE = 'New chat';
 
-export const MESSAGE_ROLE = ['user', 'assistant', 'tool'] as const;
-export type MessageRole = (typeof MESSAGE_ROLE)[number];
-
-/** A tool the assistant asked to run, as it appeared in its reply. */
-export const toolCallSchema = z.object({
-  id: z.string(),
-  /** The capability name, e.g. `medicines.create`. */
-  name: z.string(),
-  args: z.record(z.string(), z.unknown()),
-});
-export type ToolCall = z.infer<typeof toolCallSchema>;
-
+/**
+ * One conversation.
+ *
+ * Holds only what the graph does not: a name and when it was last used. The
+ * turns themselves live in the checkpointer, keyed by this record's id.
+ */
 export const chatSessionSchema = z.object({
   ...recordMetaShape,
   title: z.string().max(200),
   lastMessageAt: timestampSchema.nullable(),
 });
 export type ChatSession = z.infer<typeof chatSessionSchema>;
-
-export const chatMessageSchema = z.object({
-  ...recordMetaShape,
-  sessionId: idSchema,
-  role: z.enum(MESSAGE_ROLE),
-  content: z.string(),
-  /** Present on assistant turns that asked for tools. */
-  toolCalls: z.array(toolCallSchema),
-  /** Present on `tool` turns: which call this is the result of. */
-  toolCallId: z.string().nullable(),
-});
-export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 export const createSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -64,11 +46,6 @@ export type UpdateSessionTitleInput = z.infer<typeof updateSessionTitleSchema>;
 
 export const listSessionsSchema = paginationSchema;
 export type ListSessionsInput = z.infer<typeof listSessionsSchema>;
-
-export const listMessagesSchema = paginationSchema.extend({
-  sessionId: idSchema,
-});
-export type ListMessagesInput = z.infer<typeof listMessagesSchema>;
 
 // --- memory --------------------------------------------------------------
 

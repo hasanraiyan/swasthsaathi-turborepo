@@ -32,6 +32,7 @@ import { fromToolName } from './llm/tool-adapter';
 import { AgentFactory } from './llm/agent.factory';
 import { ModelFactory } from './llm/model.factory';
 import { TitleService } from './llm/title.service';
+import { RunLimiter } from './run-limiter.service';
 import { SessionService } from './sessions/session.service';
 
 /** One reply at a time per person -- an SSE stream each is enough to hurt. */
@@ -55,6 +56,7 @@ export class AgentService {
     private readonly titles: TitleService,
     private readonly models: ModelFactory,
     private readonly registry: CapabilityRegistry,
+    private readonly limiter: RunLimiter,
     private readonly config: ConfigService,
   ) {}
 
@@ -127,6 +129,17 @@ export class AgentService {
       yield runError(
         'You already have a reply in progress.',
         'run_in_progress',
+      );
+      return;
+    }
+
+    // Checked after the cheap guards, so a client stuck in a retry loop does
+    // not burn its own quota on requests that were never going to run.
+    const quota = this.limiter.take(actor.userId);
+    if (!quota.allowed) {
+      yield runError(
+        `You have asked a lot in the past hour. Try again in about ${quota.retryInMinutes} minute${quota.retryInMinutes === 1 ? '' : 's'}.`,
+        'rate_limited',
       );
       return;
     }

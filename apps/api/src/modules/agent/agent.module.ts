@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { PreventionModule } from '../prevention/prevention.module';
 import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
+import { RunLimiter } from './run-limiter.service';
 import { AgentFactory } from './llm/agent.factory';
 import { ModelFactory } from './llm/model.factory';
 import { TitleService } from './llm/title.service';
@@ -25,6 +26,7 @@ import { SessionService } from './sessions/session.service';
   providers: [
     AgentService,
     AgentFactory,
+    RunLimiter,
     SessionService,
     MemoryService,
     ModelFactory,
