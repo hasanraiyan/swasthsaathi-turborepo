@@ -24,6 +24,15 @@ jobs:
   build:
     name: Build Android (${{ github.run_number }})
     runs-on: ubuntu-latest
+    env:
+      # Points the built app at a local dev API tunneled through ngrok's free
+      # tier, whose URL is random and changes every time the tunnel restarts
+      # -- this value goes stale the moment that happens. Update it here (and
+      # in apps/mobile/.env.local for local builds) whenever the tunnel is
+      # restarted; without a live tunnel behind it, the app falls back to
+      # resolveBaseUrl()'s Metro-host guess, which is not reachable off the
+      # dev machine's network.
+      EXPO_PUBLIC_API_URL: https://f283-2401-4900-1686-2763-bdca-8fbe-9ecd-220a.ngrok-free.app/api
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
