@@ -1,10 +1,10 @@
 import { ClerkLoaded, ClerkLoading, ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
-// Import each weight from its own subpath, not the package barrel -- the
-// barrel requires every weight's .ttf, which Metro then bundles in full
-// (~2.8MB for all 18 Fraunces weights) regardless of what is used.
-import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces/600SemiBold';
-import { Fraunces_600SemiBold_Italic } from '@expo-google-fonts/fraunces/600SemiBold_Italic';
+// Import from its own subpath, not the package barrel -- the barrel requires
+// every weight's .ttf, which Metro then bundles in full regardless of what is
+// used. One weight only: a rounded display face reads as friendly at both the
+// sizes it's used at, so there's no need for a second.
+import { Baloo2_700Bold } from '@expo-google-fonts/baloo-2/700Bold';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -26,8 +26,7 @@ if (!publishableKey) {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Fraunces_600SemiBold,
-    Fraunces_600SemiBold_Italic,
+    Baloo2_700Bold,
   });
   const [queryClient] = useState(
     () =>
@@ -113,7 +112,7 @@ function AuthGate() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.cream },
         headerTintColor: colors.pine,
-        headerTitleStyle: { fontFamily: 'Fraunces_600SemiBold', color: colors.ink },
+        headerTitleStyle: { fontFamily: 'Baloo2_700Bold', color: colors.ink },
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.cream },
       }}

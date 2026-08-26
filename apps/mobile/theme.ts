@@ -6,7 +6,10 @@ import type { TextStyle } from 'react-native';
  *
  * Warm and human rather than clinical: a companion, not a hospital intake
  * form. Pine green for grounded trust, marigold for warmth -- the color of
- * turmeric, a everyday marker of health and care in Indian households.
+ * turmeric, an everyday marker of health and care in Indian households.
+ * `brick` carries the same idea one step further: the red of sindoor and
+ * kumkum, marks worn for protection and wellbeing rather than a stock
+ * "error" red -- it means "this needs you," not "something broke."
  */
 export const colors = {
   cream: '#FAF6EE',
@@ -42,18 +45,26 @@ export const statusColors = {
   skipped: { fill: '#EDE9E1', ink: '#5C5348' },
 } as const;
 
-/** Type scale. Display sizes use Fraunces; the rest is the system face. */
+/**
+ * Type scale. Display sizes use Baloo 2 -- a rounded, humanist face rather
+ * than a literary serif, and one built with Devanagari in mind alongside
+ * Latin. For a companion meant to work across languages, that pairing
+ * ability is a real requirement, not a look: a heading that has to survive
+ * being read in Hindi as comfortably as English shouldn't lean on a face
+ * that only has an opinion about the Latin alphabet. The rest is the system
+ * face, which already carries every script this app needs without a
+ * per-language font to load.
+ */
 export const type = {
-  display: { fontFamily: 'Fraunces_600SemiBold', fontSize: 28, lineHeight: 34 },
-  title: { fontFamily: 'Fraunces_600SemiBold', fontSize: 20, lineHeight: 26 },
+  display: { fontFamily: 'Baloo2_700Bold', fontSize: 28, lineHeight: 34 },
+  title: { fontFamily: 'Baloo2_700Bold', fontSize: 20, lineHeight: 26 },
   body: { fontSize: 16, lineHeight: 23 },
   label: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const, letterSpacing: 0.3 },
   caption: { fontSize: 13, lineHeight: 18 },
 } as const;
 
 export const fonts = {
-  display: 'Fraunces_600SemiBold',
-  displayItalic: 'Fraunces_600SemiBold_Italic',
+  display: 'Baloo2_700Bold',
 } as const;
 
 export const spacing = {

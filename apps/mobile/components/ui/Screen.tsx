@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDrawer } from '../../lib/navigation';
 import { colors, spacing, type } from '../../theme';
+import { ThreadRule } from './ThreadRule';
 
 interface ScreenProps {
   title?: string;
@@ -71,6 +72,7 @@ export function Screen({
       >
         {title ? (
           <View style={styles.header}>
+            <ThreadRule style={styles.headerRule} />
             <Text style={styles.title}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
@@ -99,6 +101,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   header: { marginBottom: spacing.lg },
+  headerRule: { marginBottom: spacing.sm },
   title: { ...type.display, color: colors.ink },
   subtitle: { ...type.body, color: colors.taupe, marginTop: spacing.xs },
   footer: {

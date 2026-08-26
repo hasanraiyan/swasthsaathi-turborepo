@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
     color: colors.marigoldText,
   },
   tagline: {
-    fontFamily: fonts.displayItalic,
+    fontStyle: 'italic',
     fontSize: 15,
     color: colors.taupe,
     marginTop: 2,

@@ -162,9 +162,9 @@ importers:
       '@clerk/expo':
         specifier: ^4.5.4
         version: 4.5.4(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bs58@6.0.0)(bufferutil@4.1.0)(expo-constants@57.0.14)(expo-secure-store@57.0.1(expo@57.0.16))(expo@57.0.16)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/metro-config@0.87.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)(typescript@6.0.3)(utf-8-validate@6.0.6)(zod@4.4.3)
-      '@expo-google-fonts/fraunces':
-        specifier: ^0.4.1
-        version: 0.4.1
+      '@expo-google-fonts/baloo-2':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@57.0.1)(react-native@0.86.2(@babel/core@7.29.7)(@react-native/metro-config@0.87.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
@@ -939,8 +939,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@expo-google-fonts/fraunces@0.4.1':
-    resolution: {integrity: sha512-gYc9P92ObyWvz1rWPOeWSvVKyBFIuA8hgOdhvo4DSiPBaWLbFA6v8uLIEIBwW+0oWTlXbBzjeBReHQI2H7UNjQ==}
+  '@expo-google-fonts/baloo-2@0.4.2':
+    resolution: {integrity: sha512-uvrw1I+sP72PY8xROJQ6CMiGHu9+WJCdi72Q+OiWpQ3sKsIRyIEXimDfgUnkk2vpWVej0JX9fLc87iDmjKE86A==}
 
   '@expo-google-fonts/material-symbols@0.4.44':
     resolution: {integrity: sha512-36JP9Chcy/QEVZ9ZGY4i6zInlyFPbQjkIm6gRNuWWltScIj0WR8rddcD57EIjSC5YKCe2ZKLO6eO/N5r8Jit0A==}
@@ -8312,7 +8312,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@expo-google-fonts/fraunces@0.4.1': {}
+  '@expo-google-fonts/baloo-2@0.4.2': {}
 
   '@expo-google-fonts/material-symbols@0.4.44': {}
 

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupConversations, useChat, type Conversation } from '../../lib/chat-store';
 import { NAV_SECTIONS, isSectionActive, useDrawer } from '../../lib/navigation';
 import { colors, radii, spacing, type } from '../../theme';
+import { ThreadRule } from '../ui/ThreadRule';
 
 /**
  * The app's primary navigation: sections, plus the chat's own new-chat action
@@ -204,6 +205,7 @@ function DrawerPanel() {
                     pressed && styles.pressed,
                   ]}
                 >
+                  <View style={styles.navMark}>{active ? <ThreadRule orientation="vertical" /> : null}</View>
                   <Feather
                     name={section.icon}
                     size={18}
@@ -341,6 +343,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.input,
   },
   navRowActive: { backgroundColor: colors.surface },
+  navMark: { width: 3, alignItems: 'center' },
   navLabel: { ...type.body, color: colors.taupe },
   navLabelActive: { color: colors.pine, fontWeight: '600' },
   groupLabel: {
