@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    name: Lint, type-check, build
+    name: Lint, type-check, build, test
     runs-on: ubuntu-latest
     steps:
       - name: 🏗 Checkout repository
@@ -22,6 +22,12 @@ jobs:
           node-version: 24
           cache: 'pnpm'
 
+      - name: 💾 Cache MongoDB memory server binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-memory-${{ runner.os }}
+
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -33,3 +39,6 @@ jobs:
 
       - name: 🔨 Build
         run: pnpm run build
+
+      - name: 🧪 Test
+        run: pnpm --filter api test
