@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  filePresented,
   runError,
   textMessageContent,
   textMessageEnd,
@@ -40,6 +41,11 @@ export class AguiTranslator {
         break;
       case 'on_tool_end':
         yield* this.onToolEnd(event.data);
+        // `present_file` writes nothing; its whole purpose is this event, so
+        // the app opens the file rather than the user reading a path.
+        if (event.name === 'present_file') {
+          yield* this.onFilePresented(event.data);
+        }
         break;
       default:
         break;
@@ -109,6 +115,27 @@ export class AguiTranslator {
       yield toolCallEnd(toolCallId);
     }
     yield toolCallResult(randomUUID(), toolCallId, textOf(output?.content));
+  }
+
+  private *onFilePresented(data: unknown): Generator<AguiEvent> {
+    const output = (data as { output?: { content?: unknown } })?.output;
+    try {
+      const payload = JSON.parse(textOf(output?.content)) as {
+        filePath?: string;
+        title?: string;
+        description?: string;
+      };
+      if (payload.filePath) {
+        yield filePresented(
+          payload.filePath,
+          payload.title ?? '',
+          payload.description ?? '',
+        );
+      }
+    } catch {
+      // The tool builds this payload itself, so a parse failure means the
+      // shape changed -- not worth failing a run the user is watching.
+    }
   }
 
   private *closeText(): Generator<AguiEvent> {

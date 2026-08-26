@@ -24,6 +24,7 @@ import {
   runFinished,
   runStarted,
   sessionTitled,
+  stateSnapshot,
   type AguiEvent,
 } from './agui/events';
 import { AguiTranslator, textOf } from './agui/translator';
@@ -62,12 +63,18 @@ export class AgentService {
     return this.config.get<string>('AGENT_CONFIRM_WRITES') !== 'false';
   }
 
+  /** The skills the assistant has. */
+  skills(): Array<{ name: string; description: string }> {
+    return this.agents.skills();
+  }
+
   info() {
     return {
       protocol: 'ag-ui' as const,
       transport: 'sse' as const,
       model: this.models.chatModelName,
       toolCount: this.registry.list().length,
+      skillCount: this.agents.skills().length,
       confirmsWrites: this.confirmsWrites,
     };
   }
@@ -156,7 +163,21 @@ export class AgentService {
       }
       yield* translator.finish();
 
-      yield* this.reportPause(agent, session.id);
+      const settled = await readGraphState(agent, session.id);
+      yield stateSnapshot(
+        toFiles(settled.values?.files),
+        toTodos(settled.values?.todos),
+      );
+
+      for (const approval of pendingApprovals(settled.tasks)) {
+        yield confirmationRequired(
+          approval.index,
+          approval.toolName,
+          approval.args,
+          approval.description ?? 'This will change your health record.',
+        );
+      }
+
       await this.sessions.touch(actor, session.id);
 
       if (titleWork) {
@@ -191,30 +212,6 @@ export class AgentService {
    * pending call sits in the interrupt, and the client answers it through
    * `/agent/resume`.
    */
-  /**
-   * If the graph stopped before a write, say what it is waiting for.
-   *
-   * Built from the same reader the reload path uses, so what a client sees
-   * live and what it sees after reopening cannot drift apart.
-   */
-  private async *reportPause(
-    agent: { getState: (config: unknown) => unknown },
-    sessionId: string,
-  ): AsyncGenerator<AguiEvent> {
-    try {
-      const snapshot = await readGraphState(agent, sessionId);
-      for (const approval of pendingApprovals(snapshot.tasks)) {
-        yield confirmationRequired(
-          approval.index,
-          approval.toolName,
-          approval.args,
-          approval.description ?? 'This will change your health record.',
-        );
-      }
-    } catch (error) {
-      this.logger.warn(`Could not read graph state: ${String(error)}`);
-    }
-  }
 }
 
 /**

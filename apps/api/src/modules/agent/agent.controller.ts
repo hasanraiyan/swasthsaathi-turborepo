@@ -48,6 +48,12 @@ export class AgentController {
     };
   }
 
+  /** The skills the assistant has, read from disk at startup. */
+  @Get('skills')
+  skills() {
+    return { skills: this.agent.skills() };
+  }
+
   @Post('run')
   run(
     @CurrentActor() actor: Actor,

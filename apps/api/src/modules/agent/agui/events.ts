@@ -86,6 +86,26 @@ export const confirmationRequired = (
     value: { index, toolName, args, description },
   });
 
+/**
+ * The agent's workspace as it now stands.
+ *
+ * Sent once the run settles so a client sees files that appeared during it
+ * without refetching the whole conversation.
+ */
+export const stateSnapshot = (files: unknown, todos: unknown): AguiEvent =>
+  event(EventType.STATE_SNAPSHOT, { snapshot: { files, todos } });
+
+/** The agent asking the app to open a file it just wrote. */
+export const filePresented = (
+  filePath: string,
+  title: string,
+  description: string,
+): AguiEvent =>
+  event(EventType.CUSTOM, {
+    name: 'file.presented',
+    value: { filePath, title, description },
+  });
+
 /** Lets the session list rename itself mid-stream instead of refetching. */
 export const sessionTitled = (sessionId: string, title: string): AguiEvent =>
   event(EventType.CUSTOM, {
