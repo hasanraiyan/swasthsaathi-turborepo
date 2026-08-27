@@ -254,9 +254,19 @@ class ActiveVoiceCall {
       }
     }
 
-    if (serverContent?.outputTranscription?.text) {
-      this.outputBuffer += serverContent.outputTranscription.text;
-      const final = Boolean(serverContent.outputTranscription.finished);
+    const modelText =
+      serverContent?.outputTranscription?.text ??
+      serverContent?.modelTurn?.parts
+        ?.map((part) => ('text' in part ? part.text : ''))
+        .filter(Boolean)
+        .join('');
+
+    if (modelText) {
+      this.outputBuffer += modelText;
+      const final = Boolean(
+        serverContent?.outputTranscription?.finished ||
+        serverContent?.turnComplete,
+      );
       this.send({
         type: 'transcript',
         role: 'assistant',
@@ -271,6 +281,19 @@ class ActiveVoiceCall {
         });
         this.outputBuffer = '';
       }
+    } else if (serverContent?.turnComplete && this.outputBuffer) {
+      this.send({
+        type: 'transcript',
+        role: 'assistant',
+        text: this.outputBuffer,
+        final: true,
+      });
+      this.turns.push({
+        role: 'assistant',
+        text: this.outputBuffer,
+        at: new Date(),
+      });
+      this.outputBuffer = '';
     }
 
     const calls = message.toolCall?.functionCalls;

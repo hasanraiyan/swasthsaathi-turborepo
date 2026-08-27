@@ -25,7 +25,10 @@ export const BOB: Actor = { userId: 'test_bob' };
 
 export class StubAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<{
+      auth?: { userId: string };
+      headers: Record<string, string | undefined>;
+    }>();
     request.auth = {
       userId: request.headers['x-test-user'] ?? 'user_anonymous',
     };

@@ -1,8 +1,7 @@
-import type { Actor } from '@repo/contracts';
 import { buildTestApp, ALICE, BOB, type TestApp } from '../support/test-app';
-import { CapabilityRegistry } from '../../src/capabilities/capability-registry.service';
 import { Connection } from 'mongoose';
 import { NotFoundError } from '../../src/common/errors';
+import { SessionService } from '../../src/modules/agent/sessions/session.service';
 
 /**
  * Integration tests for agent sessions.
@@ -13,23 +12,13 @@ import { NotFoundError } from '../../src/common/errors';
 
 describe('agent sessions', () => {
   let testApp: TestApp;
-  let registry: CapabilityRegistry;
   let connection: Connection;
-
-  // We need SessionService directly since sessions aren't capabilities
-
-  let sessionService: any;
+  let sessionService: SessionService;
 
   beforeAll(async () => {
     testApp = await buildTestApp();
-    registry = testApp.registry;
     connection = testApp.connection;
-    // Get SessionService from the NestJS container
-    sessionService = testApp.module.get(
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../../src/modules/agent/sessions/session.service')
-        .SessionService,
-    );
+    sessionService = testApp.module.get(SessionService);
   });
 
   afterAll(async () => {

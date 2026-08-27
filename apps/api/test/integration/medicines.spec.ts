@@ -1,4 +1,3 @@
-import type { Actor } from '@repo/contracts';
 import { buildTestApp, ALICE, type TestApp } from '../support/test-app';
 import { CapabilityRegistry } from '../../src/capabilities/capability-registry.service';
 import { Connection } from 'mongoose';
@@ -42,9 +41,12 @@ describe('medicines', () => {
         doseUnit: 'tablet',
         timesOfDay: ['08:00', '20:00'],
         timing: 'after_food',
+        startsOn: '2099-01-01',
       });
 
-      const day = (await registry.invoke('medicationDoses.day', ALICE, {})) as {
+      const day = (await registry.invoke('medicationDoses.day', ALICE, {
+        date: '2099-01-01',
+      })) as {
         doses: Array<{ status: string }>;
         totalCount: number;
       };

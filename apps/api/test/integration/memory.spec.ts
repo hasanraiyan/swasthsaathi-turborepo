@@ -1,4 +1,3 @@
-import type { Actor } from '@repo/contracts';
 import { buildTestApp, ALICE, BOB, type TestApp } from '../support/test-app';
 import { CapabilityRegistry } from '../../src/capabilities/capability-registry.service';
 import { Connection } from 'mongoose';

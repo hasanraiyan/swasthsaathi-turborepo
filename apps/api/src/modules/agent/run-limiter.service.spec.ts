@@ -14,11 +14,7 @@ function createLimiter(perHour = 3): RunLimiter {
       if (key === 'AGENT_RUNS_PER_HOUR') return String(perHour);
       return undefined;
     },
-  } as Parameters<
-    (typeof RunLimiter)['prototype']['take'] extends (userId: string) => infer _
-      ? never
-      : never
-  >;
+  } as any;
 
   return new RunLimiter(config);
 }
