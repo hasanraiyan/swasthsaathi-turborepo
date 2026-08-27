@@ -5,7 +5,7 @@ services:
     plan: free
     region: singapore
     buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @repo/contracts build && pnpm --filter api build
-    startCommand: pnpm --filter api start:prod
+    startCommand: cd apps/api && node dist/main
     healthCheckPath: /api
     envVars:
       - key: NODE_VERSION
