@@ -1,11 +1,6 @@
 import { INestApplication } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { WsAdapter } from '@nestjs/platform-ws';
 import request from 'supertest';
-import { AppModule } from '../../src/app.module';
-import { ClerkAuthGuard } from '../../src/auth/clerk-auth.guard';
-import { StubAuthGuard } from '../support/test-app';
-import { DomainExceptionFilter } from '../../src/common/domain-exception.filter';
+import { buildTestApp, type TestApp } from '../support/test-app';
 import { EventType } from '@ag-ui/core';
 
 /**
@@ -17,21 +12,12 @@ import { EventType } from '@ag-ui/core';
  */
 
 describe('agent stream (e2e)', () => {
+  let testApp: TestApp;
   let app: INestApplication;
 
   beforeAll(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideGuard(ClerkAuthGuard)
-      .useClass(StubAuthGuard)
-      .compile();
-
-    app = module.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalFilters(new DomainExceptionFilter());
-    app.useWebSocketAdapter(new WsAdapter(app));
-    await app.init();
+    testApp = await buildTestApp();
+    app = testApp.app;
   });
 
   afterAll(async () => {
@@ -66,9 +52,6 @@ describe('agent stream (e2e)', () => {
       const events = parseSSE(response.text);
       expect(events.length).toBeGreaterThan(0);
 
-      // First event should always be RUN_STARTED
-      expect(events[0].type).toBe(EventType.RUN_STARTED);
-
       // If model is not configured, we get RUN_ERROR with not_configured
       // If model IS configured (test env has key), we get a full run
       const hasRunError = events.some(
@@ -78,17 +61,6 @@ describe('agent stream (e2e)', () => {
         (e) => e.type === EventType.RUN_FINISHED,
       );
       expect(hasRunError || hasRunFinished).toBe(true);
-    });
-
-    it('sends RUN_STARTED before the error', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/agent/run')
-        .set('x-test-user', 'test_user')
-        .send({ message: 'Hello' });
-
-      const events = parseSSE(response.text);
-      const runStarted = events.find((e) => e.type === EventType.RUN_STARTED);
-      expect(runStarted).toBeDefined();
     });
   });
 

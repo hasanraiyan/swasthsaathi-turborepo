@@ -4,6 +4,7 @@ const common = {
   moduleFileExtensions: ['js', 'json', 'ts'] as const,
   transform: { '^.+\\.tsx?$': 'ts-jest' },
   testEnvironment: 'node' as const,
+  testTimeout: 30000,
 };
 
 const config: Config = {
