@@ -12,6 +12,8 @@ import type WebSocket from 'ws';
 
 import { CapabilityRegistry } from '../../capabilities/capability-registry.service';
 import {
+  END_CALL_FUNCTION_DECLARATION,
+  END_CALL_TOOL_NAME,
   buildFunctionDeclarations,
   handleFunctionCalls,
 } from './gemini-tool-adapter';
@@ -23,6 +25,13 @@ const activeCalls = new Set<string>();
 
 /** How long a connected socket may sit without sending `call.start`. */
 const START_TIMEOUT_MS = 15_000;
+
+/**
+ * Grace period between the assistant asking to end the call and the call
+ * ending regardless, in case `turnComplete` never arrives to confirm its
+ * goodbye actually finished streaming.
+ */
+const END_CALL_GRACE_MS = 6_000;
 
 const SYSTEM_INSTRUCTION = [
   'You are the Swasthya Saathi health assistant, speaking with someone on a',
@@ -36,6 +45,11 @@ const SYSTEM_INSTRUCTION = [
   'write. This is a health context: never guess at a dose, a diagnosis, or',
   'anything the person did not tell you, and say so if you are unsure rather',
   'than sounding certain.',
+  '',
+  `You can also end the call yourself with the ${END_CALL_TOOL_NAME} tool --`,
+  'use it once the conversation has clearly wrapped up (a goodbye, or nothing',
+  'more they need), right after saying a brief goodbye out loud. Do not use',
+  'it while a question is still open or the person is still talking.',
 ].join(' ');
 
 /** What one call ends up looking like once it is over. */
@@ -59,6 +73,8 @@ class ActiveVoiceCall {
   private session?: Session;
   private started = false;
   private ended = false;
+  /** Set once the assistant has called `end_call`; hang up on the next `turnComplete`. */
+  private endRequested = false;
   private resumeHandle?: string;
   private durationTimer?: NodeJS.Timeout;
   private startTimer?: NodeJS.Timeout;
@@ -178,7 +194,10 @@ class ActiveVoiceCall {
         // upstream or this moves off the preview model.
         tools: [
           {
-            functionDeclarations: buildFunctionDeclarations(this.deps.registry),
+            functionDeclarations: [
+              ...buildFunctionDeclarations(this.deps.registry),
+              END_CALL_FUNCTION_DECLARATION,
+            ],
           },
         ],
       },
@@ -335,12 +354,34 @@ class ActiveVoiceCall {
       this.deps.logger.log(
         `Gemini requested tool call(s) for ${this.actor.userId}: ${names}.`,
       );
-      const responses = await handleFunctionCalls(
-        this.deps.registry,
-        this.actor,
-        calls,
-      );
-      this.session?.sendToolResponse({ functionResponses: responses });
+
+      const endCallRequests = calls.filter((call) => call.name === END_CALL_TOOL_NAME);
+      const capabilityCalls = calls.filter((call) => call.name !== END_CALL_TOOL_NAME);
+
+      const responses = capabilityCalls.length
+        ? await handleFunctionCalls(this.deps.registry, this.actor, capabilityCalls)
+        : [];
+      for (const call of endCallRequests) {
+        responses.push({ id: call.id, name: call.name, response: { output: { ok: true } } });
+      }
+      if (responses.length) {
+        this.session?.sendToolResponse({ functionResponses: responses });
+      }
+
+      if (endCallRequests.length && !this.endRequested) {
+        this.endRequested = true;
+        this.deps.logger.log(
+          `Assistant asked to end the call for ${this.actor.userId}; hanging up after its closing turn.`,
+        );
+        // Fallback in case `turnComplete` never arrives to confirm the
+        // goodbye actually finished streaming -- `end()` is idempotent, so
+        // this is a no-op if the call already ended by then.
+        setTimeout(() => void this.end('assistant_ended'), END_CALL_GRACE_MS);
+      }
+    }
+
+    if (this.endRequested && serverContent?.turnComplete) {
+      void this.end('assistant_ended');
     }
 
     if (message.sessionResumptionUpdate?.newHandle) {

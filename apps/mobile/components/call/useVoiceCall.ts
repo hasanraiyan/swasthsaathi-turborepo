@@ -13,6 +13,17 @@ import { WebMicRecorder } from '../../lib/web-mic';
 
 const TAG = '[voice]';
 
+/**
+ * How far behind real time to hold the assistant's caption, so it doesn't
+ * visibly outrun the audio the person is actually hearing.
+ *
+ * `pcm-playback.ts` only starts a track once it has ~400ms of PCM buffered
+ * (plus some decode/start overhead) -- transcript messages carry no such
+ * delay, so without this the caption for a line would render well before its
+ * audio is heard.
+ */
+const CAPTION_SYNC_DELAY_MS = 450;
+
 export interface TranscriptLine {
   role: 'user' | 'assistant';
   text: string;
@@ -122,7 +133,15 @@ export function useVoiceCall(sessionId?: string) {
         if (message.type === 'audio') {
           playback.enqueue(message.data);
         } else if (message.type === 'transcript') {
-          setTranscript((current) => upsertTranscript(current, message));
+          if (message.role === 'assistant') {
+            setTimeout(() => {
+              if (!cancelled) {
+                setTranscript((current) => upsertTranscript(current, message));
+              }
+            }, CAPTION_SYNC_DELAY_MS);
+          } else {
+            setTranscript((current) => upsertTranscript(current, message));
+          }
         } else if (message.type === 'interrupted') {
           // The user started talking over the reply -- stop playing what is
           // already queued rather than let it keep going underneath them.

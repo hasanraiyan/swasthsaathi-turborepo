@@ -12,6 +12,25 @@ import { DomainError } from '../../common/errors';
 const logger = new Logger('VoiceTools');
 
 /**
+ * A call-control action, not a domain capability -- there is no equivalent
+ * of "hang up" in `CapabilityRegistry`, and there shouldn't be: it's specific
+ * to a live voice session, not something text chat or any other actor could
+ * ever mean. Handled directly in `voice-call.service.ts` rather than routed
+ * through `handleFunctionCalls` below.
+ */
+export const END_CALL_TOOL_NAME = 'end_call';
+
+export const END_CALL_FUNCTION_DECLARATION: FunctionDeclaration = {
+  name: END_CALL_TOOL_NAME,
+  description:
+    "End the phone call. Call this once the conversation has reached a natural " +
+    "close -- the person says goodbye, confirms they're done, or clearly asks " +
+    'to hang up. Say a brief goodbye out loud first, then call this; do not ' +
+    'call it mid-conversation or while a question is still open.',
+  parametersJsonSchema: { type: 'object', properties: {} },
+};
+
+/**
  * The capability catalogue, as Gemini function declarations.
  *
  * Unlike `agent/llm/tool-adapter.ts` (LangChain, OpenAI-style names), Gemini's

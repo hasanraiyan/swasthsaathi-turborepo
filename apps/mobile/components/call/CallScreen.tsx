@@ -139,17 +139,29 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
     return () => clearInterval(id);
   }, [active]);
 
+  // `router.back()` throws "GO_BACK was not handled" when this screen has no
+  // history to pop -- e.g. `/call` opened directly (a web reload, a deep
+  // link) rather than pushed from the chat screen.
+  const leaveCall = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   useEffect(() => {
     if (!finished) {
       return;
     }
-    const timer = setTimeout(() => router.back(), 1_200);
+    const timer = setTimeout(leaveCall, 1_200);
     return () => clearTimeout(timer);
-  }, [finished, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `leaveCall` is recreated each render; only `finished` should retrigger this
+  }, [finished]);
 
   const hangUp = () => {
     if (finished) {
-      router.back();
+      leaveCall();
     } else {
       endCall();
     }
