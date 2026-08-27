@@ -22,6 +22,7 @@ import type {
   StopMedicineInput,
   SymptomEntry,
   UpdateProfileInput,
+  VoiceCallLog,
 } from '@repo/contracts';
 import {
   useMutation,
@@ -61,6 +62,7 @@ export const keys = {
   appointments: ['appointments'] as const,
   symptoms: ['symptoms'] as const,
   measurements: ['measurements'] as const,
+  voiceCalls: ['voiceCalls'] as const,
 };
 
 // --- profile -------------------------------------------------------------
@@ -304,5 +306,15 @@ export function useRecordMeasurement(): UseMutationResult<
   return useMutation({
     mutationFn: (input: CreateMeasurementInput) => api.post<Measurement>('/measurements', input),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.measurements }),
+  });
+}
+
+// --- voice calls -----------------------------------------------------------
+
+export function useVoiceCalls(): UseQueryResult<ListResult<VoiceCallLog>> {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.voiceCalls,
+    queryFn: () => api.get<ListResult<VoiceCallLog>>('/voice/calls'),
   });
 }

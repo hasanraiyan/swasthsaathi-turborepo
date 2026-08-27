@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { WsAdapter } from '@nestjs/platform-ws';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { ClerkAuthGuard } from '../../src/auth/clerk-auth.guard';
@@ -25,6 +26,7 @@ describe('validation (e2e)', () => {
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalFilters(new DomainExceptionFilter());
+    app.useWebSocketAdapter(new WsAdapter(app));
     await app.init();
   });
 
@@ -80,7 +82,9 @@ describe('validation (e2e)', () => {
         .get('/api/capabilities')
         .set('x-test-user', 'test_user');
 
-      const names = response.body.capabilities.map((c: { name: string }) => c.name);
+      const names = response.body.capabilities.map(
+        (c: { name: string }) => c.name,
+      );
       const unique = new Set(names);
       expect(unique.size).toBe(names.length);
     });

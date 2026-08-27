@@ -133,9 +133,15 @@ function AuthGate() {
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false }} />
 
+      {/* The call screen is its own full-bleed UI, not a chat sub-page --
+          modal presentation and no stack header, same reasoning as the
+          primary sections above but for a different kind of screen. */}
+      <Stack.Screen name="call" options={{ headerShown: false, presentation: 'modal' }} />
+
       {/* Sub-pages reached from a section. These keep the stack header, so the
           way back out is a back arrow rather than the drawer. */}
       <Stack.Screen name="baseline" options={{ title: 'Health baseline' }} />
+      <Stack.Screen name="calls" options={{ title: 'Calls' }} />
       <Stack.Screen name="medicines/new" options={{ title: 'Add medicine' }} />
       <Stack.Screen name="medicines/[id]" options={{ title: 'Medicine' }} />
       <Stack.Screen name="conditions/index" options={{ title: 'Conditions' }} />

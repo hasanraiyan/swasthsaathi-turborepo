@@ -1,0 +1,457 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { GoogleGenAI, Modality } from '@google/genai';
+import type { LiveServerMessage, Session } from '@google/genai';
+import { voiceClientMessageSchema } from '@repo/contracts';
+import type {
+  Actor,
+  VoiceClientMessage,
+  VoiceServerMessage,
+} from '@repo/contracts';
+import type WebSocket from 'ws';
+
+import { CapabilityRegistry } from '../../capabilities/capability-registry.service';
+import {
+  buildFunctionDeclarations,
+  handleFunctionCalls,
+} from './gemini-tool-adapter';
+import { VoiceCallLimiter } from './voice-call-limiter.service';
+import { VoiceCallLogService } from './voice-call-log.service';
+
+/** One active call per person, matching the text agent's `activeRuns` gate. */
+const activeCalls = new Set<string>();
+
+/** How long a connected socket may sit without sending `call.start`. */
+const START_TIMEOUT_MS = 15_000;
+
+const SYSTEM_INSTRUCTION = [
+  'You are the Swasthya Saathi health assistant, speaking with someone on a',
+  'live voice call rather than typing. Keep replies short and conversational --',
+  'a sentence or two, the way a person talks on the phone, not the longer,',
+  'structured answers you might give in a text chat.',
+  '',
+  'You have the same tools a text conversation with this person would have:',
+  'their medicines, records, appointments and reminders. Use them the same',
+  'way -- read before you assume, and say plainly what you changed after a',
+  'write. This is a health context: never guess at a dose, a diagnosis, or',
+  'anything the person did not tell you, and say so if you are unsure rather',
+  'than sounding certain.',
+].join(' ');
+
+/** What one call ends up looking like once it is over. */
+interface CallSummary {
+  linkedSessionId: string | null;
+  model: string;
+  startedAt: Date;
+  turns: Array<{ role: 'user' | 'assistant'; text: string; at: Date }>;
+}
+
+/**
+ * One phone call's worth of state: the Gemini Live session behind it, the
+ * transcript it is accumulating, and the reconnect-on-GoAway handling.
+ *
+ * Kept as its own object per connection rather than inline in the service so
+ * a service instance (one per process) can host many concurrent calls
+ * without their mutable state (buffers, timers, the current session
+ * reference) colliding.
+ */
+class ActiveVoiceCall {
+  private session?: Session;
+  private started = false;
+  private ended = false;
+  private resumeHandle?: string;
+  private durationTimer?: NodeJS.Timeout;
+  private startTimer?: NodeJS.Timeout;
+  private inputBuffer = '';
+  private outputBuffer = '';
+  private readonly turns: CallSummary['turns'] = [];
+  private readonly startedAt = new Date();
+  private linkedSessionId: string | null = null;
+
+  constructor(
+    private readonly client: WebSocket,
+    private readonly actor: Actor,
+    private readonly deps: {
+      ai: GoogleGenAI;
+      model: string;
+      maxCallMinutes: number;
+      registry: CapabilityRegistry;
+      logs: VoiceCallLogService;
+      logger: Logger;
+    },
+  ) {
+    this.startTimer = setTimeout(() => {
+      if (!this.started) {
+        this.send({
+          type: 'call.error',
+          code: 'start_timeout',
+          message: 'No call was started.',
+        });
+        this.close();
+      }
+    }, START_TIMEOUT_MS);
+  }
+
+  handleMessage(raw: WebSocket.RawData): void {
+    const parsed = this.parse(raw);
+    if (!parsed) {
+      return;
+    }
+    if (parsed.type === 'call.start') {
+      if (!this.started) {
+        this.started = true;
+        clearTimeout(this.startTimer);
+        void this.start(parsed.sessionId);
+      }
+      return;
+    }
+    if (!this.started || this.ended) {
+      return;
+    }
+    if (parsed.type === 'audio') {
+      this.session?.sendRealtimeInput({
+        audio: { data: parsed.data, mimeType: 'audio/pcm;rate=16000' },
+      });
+    } else if (parsed.type === 'call.end') {
+      void this.end('caller_ended');
+    }
+  }
+
+  handleClose(): void {
+    clearTimeout(this.startTimer);
+    void this.end('disconnected');
+  }
+
+  private parse(raw: WebSocket.RawData): VoiceClientMessage | null {
+    try {
+      // `RawData` also covers `Buffer[]` (a fragmented message reassembled
+      // as parts) -- flatten before decoding so this never falls back to
+      // `Object.prototype.toString`.
+      const text = Buffer.isBuffer(raw)
+        ? raw.toString('utf-8')
+        : Array.isArray(raw)
+          ? Buffer.concat(raw).toString('utf-8')
+          : Buffer.from(raw).toString('utf-8');
+      const json: unknown = JSON.parse(text);
+      const result = voiceClientMessageSchema.safeParse(json);
+      return result.success ? result.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private send(message: VoiceServerMessage): void {
+    if (this.client.readyState === this.client.OPEN) {
+      this.client.send(JSON.stringify(message));
+    }
+  }
+
+  private close(): void {
+    if (this.client.readyState === this.client.OPEN) {
+      this.client.close();
+    }
+  }
+
+  private async connect(handle?: string): Promise<Session> {
+    return this.deps.ai.live.connect({
+      model: this.deps.model,
+      config: {
+        responseModalities: [Modality.AUDIO],
+        systemInstruction: SYSTEM_INSTRUCTION,
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        // Without this, an audio-only session caps out at ~15 minutes.
+        contextWindowCompression: { slidingWindow: {} },
+        // Requests periodic `sessionResumptionUpdate`s so a GoAway can be
+        // followed by a resumed session rather than a dropped call.
+        sessionResumption: handle ? { handle } : {},
+        tools: [
+          {
+            functionDeclarations: buildFunctionDeclarations(this.deps.registry),
+          },
+        ],
+      },
+      callbacks: {
+        onmessage: (message) => {
+          void this.onGeminiMessage(message);
+        },
+        onerror: (event) => {
+          this.deps.logger.warn(
+            `Gemini Live error for ${this.actor.userId}: ${String(event?.error ?? event)}`,
+          );
+        },
+        // A close mid-call that we did not request reads as the connection
+        // reset every Live session eventually gets; the graceful version of
+        // the same event is `goAway`, handled in `onGeminiMessage` below.
+        onclose: () => undefined,
+      },
+    });
+  }
+
+  private async start(linkedSessionId: string | undefined): Promise<void> {
+    activeCalls.add(this.actor.userId);
+    this.linkedSessionId = linkedSessionId ?? null;
+    this.durationTimer = setTimeout(
+      () => void this.end('duration_limit'),
+      this.deps.maxCallMinutes * 60_000,
+    );
+
+    try {
+      this.session = await this.connect();
+    } catch (error) {
+      this.deps.logger.warn(
+        `Could not open Gemini Live session for ${this.actor.userId}: ${String(error)}`,
+      );
+      activeCalls.delete(this.actor.userId);
+      clearTimeout(this.durationTimer);
+      this.send({
+        type: 'call.error',
+        code: 'upstream_unavailable',
+        message: 'Could not reach the voice service. Try again shortly.',
+      });
+      this.close();
+      return;
+    }
+
+    this.send({
+      type: 'call.ready',
+      callId: this.startedAt.getTime().toString(36),
+    });
+  }
+
+  private async onGeminiMessage(message: LiveServerMessage): Promise<void> {
+    if (this.ended) {
+      return;
+    }
+
+    const { serverContent } = message;
+    if (serverContent?.interrupted) {
+      this.send({ type: 'interrupted' });
+    }
+
+    // `message.data` is the concatenation of any inline audio parts in this
+    // update, base64-encoded 24kHz PCM -- exactly what mobile plays back.
+    if (message.data) {
+      this.send({ type: 'audio', data: message.data });
+    }
+
+    if (serverContent?.inputTranscription?.text) {
+      this.inputBuffer += serverContent.inputTranscription.text;
+      const final = Boolean(serverContent.inputTranscription.finished);
+      this.send({
+        type: 'transcript',
+        role: 'user',
+        text: this.inputBuffer,
+        final,
+      });
+      if (final) {
+        this.turns.push({
+          role: 'user',
+          text: this.inputBuffer,
+          at: new Date(),
+        });
+        this.inputBuffer = '';
+      }
+    }
+
+    if (serverContent?.outputTranscription?.text) {
+      this.outputBuffer += serverContent.outputTranscription.text;
+      const final = Boolean(serverContent.outputTranscription.finished);
+      this.send({
+        type: 'transcript',
+        role: 'assistant',
+        text: this.outputBuffer,
+        final,
+      });
+      if (final) {
+        this.turns.push({
+          role: 'assistant',
+          text: this.outputBuffer,
+          at: new Date(),
+        });
+        this.outputBuffer = '';
+      }
+    }
+
+    const calls = message.toolCall?.functionCalls;
+    if (calls?.length) {
+      const responses = await handleFunctionCalls(
+        this.deps.registry,
+        this.actor,
+        calls,
+      );
+      this.session?.sendToolResponse({ functionResponses: responses });
+    }
+
+    if (message.sessionResumptionUpdate?.newHandle) {
+      this.resumeHandle = message.sessionResumptionUpdate.newHandle;
+    }
+
+    if (message.goAway) {
+      this.send({ type: 'reconnecting' });
+      try {
+        this.session = await this.connect(this.resumeHandle);
+        this.send({ type: 'reconnected' });
+      } catch (error) {
+        this.deps.logger.warn(
+          `Voice reconnect failed for ${this.actor.userId}: ${String(error)}`,
+        );
+        void this.end('reconnect_failed');
+      }
+    }
+  }
+
+  private async end(reason: string): Promise<void> {
+    if (this.ended) {
+      return;
+    }
+    this.ended = true;
+    clearTimeout(this.durationTimer);
+    clearTimeout(this.startTimer);
+    if (this.started) {
+      activeCalls.delete(this.actor.userId);
+    }
+    this.session?.close();
+
+    // A call can end mid-utterance; flush whatever transcript was in flight
+    // rather than silently dropping the last thing either side said.
+    if (this.inputBuffer) {
+      this.turns.push({ role: 'user', text: this.inputBuffer, at: new Date() });
+    }
+    if (this.outputBuffer) {
+      this.turns.push({
+        role: 'assistant',
+        text: this.outputBuffer,
+        at: new Date(),
+      });
+    }
+
+    if (this.started) {
+      await this.deps.logs
+        .record(this.actor, {
+          linkedSessionId: this.linkedSessionId,
+          model: this.deps.model,
+          startedAt: this.startedAt,
+          endedAt: new Date(),
+          endReason: reason,
+          turns: this.turns,
+        })
+        .catch((error) => {
+          this.deps.logger.warn(
+            `Could not save voice call log for ${this.actor.userId}: ${String(error)}`,
+          );
+        });
+      this.send({ type: 'call.ended', reason });
+    }
+    this.close();
+  }
+}
+
+/**
+ * Real-time voice calling.
+ *
+ * Mobile opens a WebSocket here; this is the only thing in the system that
+ * holds a Gemini API key or talks to Google at all. One `ActiveVoiceCall`
+ * per connection does the actual relaying -- this service is the admission
+ * check (configured? already on a call? within the hourly cap?) and the
+ * factory for it.
+ */
+@Injectable()
+export class VoiceCallService implements OnModuleInit {
+  private readonly logger = new Logger(VoiceCallService.name);
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly registry: CapabilityRegistry,
+    private readonly limiter: VoiceCallLimiter,
+    private readonly logs: VoiceCallLogService,
+  ) {}
+
+  get isConfigured(): boolean {
+    return Boolean(this.apiKey());
+  }
+
+  get modelName(): string {
+    // A preview model; the id shifts as Google's Live API matures, hence the
+    // env var rather than a literal used anywhere else in this module.
+    return (
+      this.config.get<string>('GEMINI_LIVE_MODEL') ??
+      'gemini-3.1-flash-live-preview'
+    );
+  }
+
+  get callsPerHour(): number {
+    return this.number('VOICE_CALLS_PER_HOUR', 10);
+  }
+
+  get maxCallMinutes(): number {
+    return this.number('VOICE_CALL_MAX_MINUTES', 20);
+  }
+
+  private apiKey(): string | undefined {
+    return this.config.get<string>('GEMINI_API_KEY') || undefined;
+  }
+
+  private number(key: string, fallback: number): number {
+    const value = Number(this.config.get<string>(key));
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  }
+
+  /** Say at startup whether the voice feature will actually work. */
+  onModuleInit(): void {
+    if (!this.isConfigured) {
+      this.logger.warn(
+        'GEMINI_API_KEY is not set -- voice calling will refuse to start.',
+      );
+    }
+  }
+
+  /** Wire a freshly-authenticated WebSocket into a voice call. */
+  handleConnection(client: WebSocket, actor: Actor): void {
+    if (!this.isConfigured) {
+      this.reject(
+        client,
+        'not_configured',
+        'Voice calling is not configured on this server.',
+      );
+      return;
+    }
+    if (activeCalls.has(actor.userId)) {
+      this.reject(
+        client,
+        'call_in_progress',
+        'You already have a call in progress.',
+      );
+      return;
+    }
+    const quota = this.limiter.take(actor.userId);
+    if (!quota.allowed) {
+      this.reject(
+        client,
+        'rate_limited',
+        `You have called a lot in the past hour. Try again in about ${quota.retryInMinutes} minute${quota.retryInMinutes === 1 ? '' : 's'}.`,
+      );
+      return;
+    }
+
+    const call = new ActiveVoiceCall(client, actor, {
+      ai: new GoogleGenAI({ apiKey: this.apiKey() }),
+      model: this.modelName,
+      maxCallMinutes: this.maxCallMinutes,
+      registry: this.registry,
+      logs: this.logs,
+      logger: this.logger,
+    });
+
+    client.on('message', (raw: WebSocket.RawData) => call.handleMessage(raw));
+    client.on('close', () => call.handleClose());
+  }
+
+  private reject(client: WebSocket, code: string, message: string): void {
+    const payload: VoiceServerMessage = { type: 'call.error', code, message };
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(payload));
+      client.close();
+    }
+  }
+}

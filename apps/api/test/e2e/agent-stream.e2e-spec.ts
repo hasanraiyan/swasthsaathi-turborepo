@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { WsAdapter } from '@nestjs/platform-ws';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { ClerkAuthGuard } from '../../src/auth/clerk-auth.guard';
@@ -29,6 +30,7 @@ describe('agent stream (e2e)', () => {
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalFilters(new DomainExceptionFilter());
+    app.useWebSocketAdapter(new WsAdapter(app));
     await app.init();
   });
 
@@ -36,7 +38,9 @@ describe('agent stream (e2e)', () => {
     await app.close();
   });
 
-  function parseSSE(text: string): Array<{ type: string; [key: string]: unknown }> {
+  function parseSSE(
+    text: string,
+  ): Array<{ type: string; [key: string]: unknown }> {
     return text
       .split('\n')
       .filter((l) => l.startsWith('data: '))

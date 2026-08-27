@@ -29,7 +29,16 @@
       "expo-secure-store",
       "@clerk/expo",
       "expo-font",
-      "expo-router"
+      "expo-router",
+      "expo-dev-client",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SwasthSaathi uses your microphone during a voice call with the assistant.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ]
   }
 }

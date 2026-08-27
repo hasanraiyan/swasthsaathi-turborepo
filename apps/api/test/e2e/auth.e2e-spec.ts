@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { WsAdapter } from '@nestjs/platform-ws';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { ClerkAuthGuard } from '../../src/auth/clerk-auth.guard';
@@ -24,6 +25,7 @@ describe('auth (e2e)', () => {
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalFilters(new DomainExceptionFilter());
+    app.useWebSocketAdapter(new WsAdapter(app));
     await app.init();
   });
 
@@ -63,6 +65,7 @@ describe('real ClerkAuthGuard (e2e)', () => {
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalFilters(new DomainExceptionFilter());
+    app.useWebSocketAdapter(new WsAdapter(app));
     await app.init();
   });
 

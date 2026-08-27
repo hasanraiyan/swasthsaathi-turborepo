@@ -11,3 +11,4 @@ export * from './appointments';
 export * from './symptoms';
 export * from './measurements';
 export * from './documents';
+export * from './voice';

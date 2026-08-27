@@ -15,6 +15,7 @@ import { MedicinesModule } from './modules/medicines/medicines.module';
 import { PreventionModule } from './modules/prevention/prevention.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { SymptomsModule } from './modules/symptoms/symptoms.module';
+import { VoiceModule } from './modules/voice/voice.module';
 
 /**
  * Swasthya Saathi's API.
@@ -39,6 +40,7 @@ import { SymptomsModule } from './modules/symptoms/symptoms.module';
     MeasurementsModule,
     DocumentsModule,
     AgentModule,
+    VoiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

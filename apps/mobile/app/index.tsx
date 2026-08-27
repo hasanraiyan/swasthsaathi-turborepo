@@ -1,5 +1,6 @@
 import Feather from '@expo/vector-icons/Feather';
 import type { AgentFile } from '@repo/contracts';
+import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -28,6 +29,7 @@ import { colors, contentMaxWidth, spacing, type } from '../theme';
  */
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { openDrawer } = useDrawer();
   const {
     activeConversation,
@@ -67,15 +69,33 @@ export default function ChatScreen() {
           {activeConversation?.title ?? 'New chat'}
         </Text>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Start a new chat"
-          onPress={newChat}
-          hitSlop={10}
-          style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-        >
-          <Feather name="edit" size={20} color={colors.pine} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start a voice call"
+            onPress={() =>
+              router.push(
+                activeConversation
+                  ? { pathname: '/call', params: { sessionId: activeConversation.id } }
+                  : '/call',
+              )
+            }
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+          >
+            <Feather name="phone" size={20} color={colors.pine} />
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start a new chat"
+            onPress={newChat}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+          >
+            <Feather name="edit" size={20} color={colors.pine} />
+          </Pressable>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -195,6 +215,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerActions: { flexDirection: 'row' },
   headerTitle: { ...type.title, color: colors.ink, flex: 1, textAlign: 'center' },
   pressed: { opacity: 0.6 },
   // width: '100%' alongside maxWidth so alignSelf: 'center' has a full-width

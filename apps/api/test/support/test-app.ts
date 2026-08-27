@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { Connection } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';
@@ -71,6 +72,9 @@ export async function buildTestApp(): Promise<TestApp> {
   const app = module.createNestApplication();
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new DomainExceptionFilter());
+  // Matches main.ts: without this, Nest falls back to its default
+  // WebSocket driver (Socket.io) for VoiceGateway, which isn't installed.
+  app.useWebSocketAdapter(new WsAdapter(app));
   await app.init();
 
   return {

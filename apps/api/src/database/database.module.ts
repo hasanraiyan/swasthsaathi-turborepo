@@ -32,6 +32,10 @@ import {
   SymptomEntry,
   SymptomEntrySchema,
 } from './schemas/symptom-entry.schema';
+import {
+  VoiceCallLog,
+  VoiceCallLogSchema,
+} from './schemas/voice-call-log.schema';
 
 // Apply the fill-defaults plugin to every schema while each is still
 // individually typed.  The array below widens to a union, so calling
@@ -49,6 +53,7 @@ HealthDocumentSchema.plugin(fillDefaultsOnRead);
 PreventiveCheckLogSchema.plugin(fillDefaultsOnRead);
 ChatSessionSchema.plugin(fillDefaultsOnRead);
 AgentMemorySchema.plugin(fillDefaultsOnRead);
+VoiceCallLogSchema.plugin(fillDefaultsOnRead);
 
 const registrations = [
   { name: Profile.name, schema: ProfileSchema },
@@ -64,6 +69,7 @@ const registrations = [
   { name: PreventiveCheckLog.name, schema: PreventiveCheckLogSchema },
   { name: ChatSession.name, schema: ChatSessionSchema },
   { name: AgentMemory.name, schema: AgentMemorySchema },
+  { name: VoiceCallLog.name, schema: VoiceCallLogSchema },
 ];
 
 const models = MongooseModule.forFeature(registrations);
