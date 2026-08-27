@@ -1,11 +1,6 @@
 import { INestApplication } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { WsAdapter } from '@nestjs/platform-ws';
 import request from 'supertest';
-import { AppModule } from '../../src/app.module';
-import { ClerkAuthGuard } from '../../src/auth/clerk-auth.guard';
-import { StubAuthGuard } from '../support/test-app';
-import { DomainExceptionFilter } from '../../src/common/domain-exception.filter';
+import { buildTestApp, type TestApp } from '../support/test-app';
 
 /**
  * E2E tests for validation: bad bodies, malformed ids, and the capabilities
@@ -13,21 +8,12 @@ import { DomainExceptionFilter } from '../../src/common/domain-exception.filter'
  */
 
 describe('validation (e2e)', () => {
+  let testApp: TestApp;
   let app: INestApplication;
 
   beforeAll(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideGuard(ClerkAuthGuard)
-      .useClass(StubAuthGuard)
-      .compile();
-
-    app = module.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalFilters(new DomainExceptionFilter());
-    app.useWebSocketAdapter(new WsAdapter(app));
-    await app.init();
+    testApp = await buildTestApp();
+    app = testApp.app;
   });
 
   afterAll(async () => {
