@@ -173,6 +173,10 @@ class ActiveVoiceCall {
         // followed by a resumed session rather than a dropped call.
         sessionResumption: handle ? { handle } : {},
         tools: [
+          // Grounds replies in live web results -- separate array entry from
+          // the capability functions below, per Gemini Live's own docs for
+          // combining a built-in tool with custom function declarations.
+          { googleSearch: {} },
           {
             functionDeclarations: buildFunctionDeclarations(this.deps.registry),
           },
@@ -350,7 +354,9 @@ class ActiveVoiceCall {
       this.send({ type: 'reconnecting' });
       try {
         this.session = await this.connect(this.resumeHandle);
-        this.deps.logger.log(`Voice reconnect succeeded for ${this.actor.userId}.`);
+        this.deps.logger.log(
+          `Voice reconnect succeeded for ${this.actor.userId}.`,
+        );
         this.send({ type: 'reconnected' });
       } catch (error) {
         this.deps.logger.warn(
@@ -473,8 +479,17 @@ export class VoiceCallService implements OnModuleInit {
     }
   }
 
-  /** Wire a freshly-authenticated WebSocket into a voice call. */
-  handleConnection(client: WebSocket, actor: Actor): void {
+  /**
+   * Wire a freshly-authenticated WebSocket into a voice call.
+   *
+   * `buffered` is whatever the gateway caught while it was off verifying the
+   * token -- replayed below, in order, once this is the thing listening.
+   */
+  handleConnection(
+    client: WebSocket,
+    actor: Actor,
+    buffered: WebSocket.RawData[] = [],
+  ): void {
     if (!this.isConfigured) {
       this.logger.warn(
         `Rejected voice call for ${actor.userId}: server not configured (GEMINI_API_KEY missing).`,
@@ -522,6 +537,15 @@ export class VoiceCallService implements OnModuleInit {
 
     client.on('message', (raw: WebSocket.RawData) => call.handleMessage(raw));
     client.on('close', () => call.handleClose());
+
+    if (buffered.length) {
+      this.logger.log(
+        `Replaying ${buffered.length} frame(s) buffered for ${actor.userId} during auth.`,
+      );
+      for (const raw of buffered) {
+        call.handleMessage(raw);
+      }
+    }
   }
 
   private reject(client: WebSocket, code: string, message: string): void {

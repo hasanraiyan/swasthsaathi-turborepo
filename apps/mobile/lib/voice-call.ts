@@ -87,7 +87,10 @@ export class VoiceCallClient {
           );
         }
       } else {
-        console.log(`${TAG} received ${parsed.type}`, parsed);
+        // Stringified rather than passed as a second arg: devtools collapses
+        // object args behind a lazily-expanded "Object" placeholder that a
+        // plain-text copy/paste of the console can't capture.
+        console.log(`${TAG} received ${parsed.type}: ${JSON.stringify(parsed)}`);
       }
       if (parsed.type === 'call.ready') {
         this.setState('active');

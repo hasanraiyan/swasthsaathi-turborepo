@@ -37,26 +37,57 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
   const active = status === 'active';
   const connecting = status === 'connecting' || status === 'ready' || status === 'reconnecting';
 
-  const currentLine = transcript.at(-1) ?? null;
-  const assistantSpeaking = active && currentLine?.role === 'assistant' && !currentLine.committed;
-  const liveLabel = !active ? null : assistantSpeaking ? 'Speaking…' : 'Listening…';
+  // Only the assistant gets captioned -- this is meant to read like a phone's
+  // live captions for what the *other* party is saying, not a transcript of
+  // both sides.
+  const assistantLines = transcript.filter((line) => line.role === 'assistant');
+  const currentLine = assistantLines.at(-1) ?? null;
+  const words = currentLine ? currentLine.text.split(/\s+/).filter(Boolean) : [];
 
-  // --- caption fade: appears with the line, holds once it's committed, then vanishes ---
-  // Lazy `useState` rather than `useRef`: stable for the screen's life, but
-  // read during render (`captionOpacity` is used directly in JSX below).
+  // --- word-by-word reveal: paced independently of how chunky Gemini's own
+  // transcript updates are, so the caption reads as spoken rather than dumped
+  // on screen the instant a chunk of text arrives ---
+  const [revealedCount, setRevealedCount] = useState(0);
+  const seenLineCount = useRef(0);
+  const fullyRevealed = revealedCount >= words.length;
+
   const [captionOpacity] = useState(() => new Animated.Value(0));
+
+  // A new assistant line started -- fade in and restart the reveal from zero.
   useEffect(() => {
-    if (!currentLine) {
+    if (assistantLines.length === seenLineCount.current) {
       return;
     }
+    seenLineCount.current = assistantLines.length;
+    setRevealedCount(0);
     captionOpacity.stopAnimation();
     Animated.timing(captionOpacity, {
       toValue: 1,
       duration: 180,
       useNativeDriver: true,
     }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires on a new line, not every render
+  }, [assistantLines.length]);
 
-    if (!currentLine.committed) {
+  // Reveal a word at a time, speeding up if Gemini's own updates arrive in
+  // large bursts so the caption can catch up without stalling.
+  useEffect(() => {
+    if (!currentLine || fullyRevealed) {
+      return;
+    }
+    const backlog = words.length - revealedCount;
+    const step = backlog > 6 ? 2 : 1;
+    const delay = backlog > 6 ? 35 : 90;
+    const timer = setTimeout(() => {
+      setRevealedCount((count) => Math.min(words.length, count + step));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [currentLine, revealedCount, words.length, fullyRevealed]);
+
+  // Once the line is both finished streaming and fully revealed, hold it a
+  // moment, then fade it out.
+  useEffect(() => {
+    if (!currentLine?.committed || !fullyRevealed) {
       return;
     }
     const timer = setTimeout(() => {
@@ -67,8 +98,13 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
       }).start();
     }, CAPTION_HOLD_MS);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on every new/updated line
-  }, [transcript]);
+  }, [currentLine?.committed, fullyRevealed, captionOpacity]);
+
+  const liveLabel = !active
+    ? null
+    : currentLine && (!currentLine.committed || !fullyRevealed)
+      ? 'Speaking…'
+      : 'Listening…';
 
   // --- avatar pulse while the call is live ---
   const [pulse] = useState(() => new Animated.Value(0));
@@ -154,11 +190,9 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
         <View style={styles.captionSlot}>
           {currentLine ? (
             <Animated.View style={{ opacity: captionOpacity }}>
-              <Text style={styles.speakerLabel}>
-                {currentLine.role === 'user' ? 'You' : 'Swasthya Saathi'}
-              </Text>
               <Text style={styles.caption} numberOfLines={4}>
-                {currentLine.text}
+                {words.slice(0, revealedCount).join(' ')}
+                {!fullyRevealed && <Text style={styles.cursor}> ·</Text>}
               </Text>
             </Animated.View>
           ) : null}
@@ -237,22 +271,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
-  speakerLabel: {
-    ...type.caption,
-    color: colors.marigold,
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
   caption: {
     ...type.title,
     color: colors.cream,
     textAlign: 'center',
     lineHeight: 26,
   },
+  cursor: { color: colors.marigold, fontWeight: '700' },
 
   footer: { alignItems: 'center', paddingTop: spacing.lg },
   hangUp: {

@@ -28,12 +28,25 @@ export class VoiceGateway implements OnGatewayConnection {
     client: WebSocket,
     request: IncomingMessage,
   ): Promise<void> {
-    this.logger.log(`Voice socket connecting from ${request.socket.remoteAddress ?? 'unknown'}.`);
+    this.logger.log(
+      `Voice socket connecting from ${request.socket.remoteAddress ?? 'unknown'}.`,
+    );
+
+    // The client sends `call.start` the instant its socket opens, which can
+    // (and does) arrive before `verifyVoiceToken`'s round trip to Clerk
+    // resolves below -- `ws` does not replay a message to a listener added
+    // after the fact, so without this buffer that frame is silently lost and
+    // the call times out 15s later never having "started".
+    const buffered: WebSocket.RawData[] = [];
+    const buffer = (data: WebSocket.RawData) => buffered.push(data);
+    client.on('message', buffer);
+
     const token = new URL(
       request.url ?? '',
       'http://voice.internal',
     ).searchParams.get('token');
     const identity = await verifyVoiceToken(token ?? undefined);
+    client.off('message', buffer);
     if (!identity) {
       // 4401: a private application close code, mirroring the 401 an HTTP
       // request would get. There is no response body on a WS close, which is
@@ -45,6 +58,6 @@ export class VoiceGateway implements OnGatewayConnection {
     }
 
     this.logger.log(`Voice socket authenticated for user ${identity.userId}.`);
-    this.calls.handleConnection(client, { userId: identity.userId });
+    this.calls.handleConnection(client, { userId: identity.userId }, buffered);
   }
 }
