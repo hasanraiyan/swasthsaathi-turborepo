@@ -172,11 +172,11 @@ class ActiveVoiceCall {
         // Requests periodic `sessionResumptionUpdate`s so a GoAway can be
         // followed by a resumed session rather than a dropped call.
         sessionResumption: handle ? { handle } : {},
+        // `googleSearch` alongside `functionDeclarations` is documented as
+        // supported, but in practice hangs the connect() call forever on
+        // `gemini-3.1-flash-live-preview` -- reverted until that's fixed
+        // upstream or this moves off the preview model.
         tools: [
-          // Grounds replies in live web results -- separate array entry from
-          // the capability functions below, per Gemini Live's own docs for
-          // combining a built-in tool with custom function declarations.
-          { googleSearch: {} },
           {
             functionDeclarations: buildFunctionDeclarations(this.deps.registry),
           },

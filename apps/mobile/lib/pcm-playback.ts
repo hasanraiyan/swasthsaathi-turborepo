@@ -26,9 +26,11 @@ const TAG = '[voice]';
 const SAMPLE_RATE = 24_000;
 const CHANNELS = 1;
 const BYTES_PER_SAMPLE = 2;
-// Coalesce chunks into ~150ms tracks: small enough to stay responsive, large
-// enough that the playlist isn't switching sources many times a second.
-const FLUSH_BYTES = Math.floor(SAMPLE_RATE * BYTES_PER_SAMPLE * 0.15);
+// Coalesce chunks into ~400ms tracks. Was 150ms, but each track switch is a
+// candidate for an audible stutter if the playlist's gapless transition
+// isn't actually gapless on a given platform -- fewer, larger tracks trade a
+// bit of latency for fewer of those seams per second of audio.
+const FLUSH_BYTES = Math.floor(SAMPLE_RATE * BYTES_PER_SAMPLE * 0.4);
 
 export class VoicePlayback {
   private readonly playlist: AudioPlaylist;
