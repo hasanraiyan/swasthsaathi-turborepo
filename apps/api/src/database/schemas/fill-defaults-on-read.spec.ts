@@ -99,7 +99,9 @@ describe('fillDefaultsOnRead', () => {
 
   it('handles documents inserted without _id gracefully', async () => {
     // Every Mongo document has _id, but test the plugin doesn't choke
-    const doc = await TestModel.findOne({ userId: 'nonexistent' }).lean().exec();
+    const doc = await TestModel.findOne({ userId: 'nonexistent' })
+      .lean()
+      .exec();
     expect(doc).toBeNull();
   });
 });

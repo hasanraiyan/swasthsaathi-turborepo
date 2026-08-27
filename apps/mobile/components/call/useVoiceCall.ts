@@ -3,11 +3,13 @@ import type { VoiceServerMessage } from '@repo/contracts';
 import { requestRecordingPermissionsAsync, useAudioStream } from 'expo-audio';
 import type { AudioStreamBuffer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import { bytesToBase64 } from '../../lib/base64';
 import { VoicePlayback } from '../../lib/pcm-playback';
 import { VoiceCallClient } from '../../lib/voice-call';
 import type { VoiceCallState } from '../../lib/voice-call';
+import { WebMicRecorder } from '../../lib/web-mic';
 
 export interface TranscriptLine {
   role: 'user' | 'assistant';
@@ -22,10 +24,10 @@ export interface TranscriptLine {
  * or rate-limited), plays back what comes in, and tears everything down on
  * unmount or hangup.
  *
- * Capture uses `expo-audio`'s own `useAudioStream` -- an official, first-party
- * source of real-time raw PCM, so this needs no third-party native module for
- * the microphone side. Playback (`lib/pcm-playback.ts`) is the part with no
- * equally direct answer; see that file for why.
+ * Capture uses `expo-audio`'s `useAudioStream` on native, and a browser-native
+ * Web Audio API recorder (`WebMicRecorder`) on web where `useAudioStream` is a stub.
+ * Playback (`lib/pcm-playback.ts`) wraps streamed PCM chunks in WAV containers
+ * for seamless playback.
  */
 export function useVoiceCall(sessionId?: string) {
   const { getToken } = useAuth();
@@ -35,13 +37,16 @@ export function useVoiceCall(sessionId?: string) {
 
   const clientRef = useRef<VoiceCallClient | null>(null);
   const playbackRef = useRef<VoicePlayback | null>(null);
+  const webMicRef = useRef<WebMicRecorder>(new WebMicRecorder());
 
   const { stream } = useAudioStream({
     sampleRate: 16_000,
     channels: 1,
     encoding: 'int16',
     onBuffer: (buffer: AudioStreamBuffer) => {
-      clientRef.current?.sendAudioChunk(bytesToBase64(new Uint8Array(buffer.data)));
+      clientRef.current?.sendAudioChunk(
+        bytesToBase64(new Uint8Array(buffer.data)),
+      );
     },
   });
   // A ref rather than a dependency: `useAudioStream` returns a new `stream`
@@ -55,21 +60,34 @@ export function useVoiceCall(sessionId?: string) {
     let cancelled = false;
     let micStarted = false;
     const playback = new VoicePlayback();
+    playback.prime();
     playbackRef.current = playback;
 
     const startMic = async () => {
+      if (Platform.OS === 'web') {
+        await webMicRef.current.start((chunk) => {
+          clientRef.current?.sendAudioChunk(chunk);
+        });
+        micStarted = true;
+        return;
+      }
+
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
         throw new Error('Microphone permission denied');
       }
-      await streamRef.current.start();
+      await streamRef.current?.start?.();
       micStarted = true;
     };
 
     const stopMic = () => {
       if (micStarted) {
         micStarted = false;
-        streamRef.current.stop();
+        if (Platform.OS === 'web') {
+          webMicRef.current.stop();
+        } else {
+          streamRef.current?.stop?.();
+        }
       }
     };
 
@@ -80,7 +98,9 @@ export function useVoiceCall(sessionId?: string) {
         }
         setStatus(state);
         if (state === 'active' && !micStarted) {
-          startMic().catch(() => setErrorMessage('Could not access the microphone.'));
+          startMic().catch(() =>
+            setErrorMessage('Could not access the microphone.'),
+          );
         }
         if (state === 'ended' || state === 'error') {
           stopMic();
@@ -124,7 +144,11 @@ export function useVoiceCall(sessionId?: string) {
   }, [sessionId]);
 
   const endCall = useCallback(() => {
-    streamRef.current.stop();
+    if (Platform.OS === 'web') {
+      webMicRef.current.stop();
+    } else {
+      streamRef.current?.stop?.();
+    }
     clientRef.current?.end();
   }, []);
 

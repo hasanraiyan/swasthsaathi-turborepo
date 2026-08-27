@@ -14,7 +14,9 @@ import { normalizeTurns } from './agent.service';
 describe('normalizeTurns', () => {
   function aiMessage(
     content: string,
-    opts: { tool_calls?: Array<{ id: string; name: string; args: unknown }> } = {},
+    opts: {
+      tool_calls?: Array<{ id: string; name: string; args: unknown }>;
+    } = {},
   ) {
     return {
       _getType: () => 'ai',
@@ -47,10 +49,7 @@ describe('normalizeTurns', () => {
   }
 
   it('two consecutive AIMessages become one turn, concatenated with no separator', () => {
-    const messages = [
-      aiMessage('Part one'),
-      aiMessage('Part two'),
-    ];
+    const messages = [aiMessage('Part one'), aiMessage('Part two')];
 
     const turns = normalizeTurns(messages);
     expect(turns).toHaveLength(1);
@@ -61,7 +60,9 @@ describe('normalizeTurns', () => {
   it('a tool message folds onto its call as result', () => {
     const messages = [
       aiMessage('Let me check', {
-        tool_calls: [{ id: 'call_1', name: 'medicines__get', args: { id: '123' } }],
+        tool_calls: [
+          { id: 'call_1', name: 'medicines__get', args: { id: '123' } },
+        ],
       }),
       toolMessage('{"name":"Aspirin"}', 'call_1'),
     ];

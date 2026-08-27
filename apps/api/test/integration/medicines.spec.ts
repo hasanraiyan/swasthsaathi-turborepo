@@ -31,11 +31,10 @@ describe('medicines', () => {
 
   describe('dose materialisation', () => {
     it('creating a medicine, adding a schedule, then reading the day materialises one dose per time', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Metformin', form: 'tablet' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Metformin',
+        form: 'tablet',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,
@@ -55,11 +54,9 @@ describe('medicines', () => {
     });
 
     it('reading the same day twice does not duplicate doses', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Aspirin' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Aspirin',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,
@@ -82,11 +79,9 @@ describe('medicines', () => {
 
   describe('dose lifecycle', () => {
     it('recording a dose as taken moves it out of pending and into adherence numbers', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Metformin' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Metformin',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,
@@ -120,11 +115,9 @@ describe('medicines', () => {
 
   describe('stop vs delete', () => {
     it('medicines.stop deactivates schedules and keeps past doses', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Metformin' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Metformin',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,
@@ -156,11 +149,9 @@ describe('medicines', () => {
     });
 
     it('medicines.delete removes the medicine and its schedules', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Ibuprofen' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Ibuprofen',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,
@@ -185,11 +176,9 @@ describe('medicines', () => {
 
   describe('validation', () => {
     it('a schedule ending before it starts is refused', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Test' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Test',
+      })) as { id: string };
 
       await expect(
         registry.invoke('medicationSchedules.create', ALICE, {
@@ -207,11 +196,9 @@ describe('medicines', () => {
 
   describe('adherence', () => {
     it('adherence over a window counts taken, missed and skipped, and rate excludes pending', async () => {
-      const medicine = (await registry.invoke(
-        'medicines.create',
-        ALICE,
-        { name: 'Metformin' },
-      )) as { id: string };
+      const medicine = (await registry.invoke('medicines.create', ALICE, {
+        name: 'Metformin',
+      })) as { id: string };
 
       await registry.invoke('medicationSchedules.create', ALICE, {
         medicineId: medicine.id,

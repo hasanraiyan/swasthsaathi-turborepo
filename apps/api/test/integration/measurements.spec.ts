@@ -38,41 +38,29 @@ describe('measurements', () => {
     });
 
     it('recording without a unit fills in the type default', async () => {
-      const measurement = (await registry.invoke(
-        'measurements.record',
-        ALICE,
-        {
-          type: 'weight',
-          value: 70,
-        },
-      )) as { unit: string };
+      const measurement = (await registry.invoke('measurements.record', ALICE, {
+        type: 'weight',
+        value: 70,
+      })) as { unit: string };
 
       expect(measurement.unit).toBe('kg');
     });
 
     it('changing a reading type without a unit updates the unit too', async () => {
-      const created = (await registry.invoke(
-        'measurements.record',
-        ALICE,
-        {
-          type: 'blood_pressure',
-          value: 140,
-          valueSecondary: 90,
-        },
-      )) as { id: string; unit: string };
+      const created = (await registry.invoke('measurements.record', ALICE, {
+        type: 'blood_pressure',
+        value: 140,
+        valueSecondary: 90,
+      })) as { id: string; unit: string };
 
       expect(created.unit).toBe('mmHg');
 
       // Update the type to weight without specifying a unit
-      const updated = (await registry.invoke(
-        'measurements.update',
-        ALICE,
-        {
-          id: created.id,
-          type: 'weight',
-          value: 70,
-        },
-      )) as { unit: string };
+      const updated = (await registry.invoke('measurements.update', ALICE, {
+        id: created.id,
+        type: 'weight',
+        value: 70,
+      })) as { unit: string };
 
       expect(updated.unit).toBe('kg');
     });

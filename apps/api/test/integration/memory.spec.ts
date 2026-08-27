@@ -57,7 +57,7 @@ describe('memory', () => {
     it('memory written by alice is invisible to bob', async () => {
       await registry.invoke('memory.write', ALICE, {
         key: 'secret',
-        content: 'Alice\'s private note',
+        content: "Alice's private note",
       });
 
       const bobList = (await registry.invoke('memory.list', BOB)) as {

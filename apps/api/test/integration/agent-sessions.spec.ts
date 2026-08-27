@@ -17,7 +17,7 @@ describe('agent sessions', () => {
   let connection: Connection;
 
   // We need SessionService directly since sessions aren't capabilities
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let sessionService: any;
 
   beforeAll(async () => {
@@ -27,7 +27,8 @@ describe('agent sessions', () => {
     // Get SessionService from the NestJS container
     sessionService = testApp.module.get(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../../src/modules/agent/sessions/session.service').SessionService,
+      require('../../src/modules/agent/sessions/session.service')
+        .SessionService,
     );
   });
 
@@ -59,7 +60,7 @@ describe('agent sessions', () => {
   });
 
   describe('ownership', () => {
-    it('bob cannot read, retitle or delete alice\'s session', async () => {
+    it("bob cannot read, retitle or delete alice's session", async () => {
       const session = await sessionService.create(ALICE, {});
 
       await expect(sessionService.get(BOB, { id: session.id })).rejects.toThrow(
@@ -70,12 +71,12 @@ describe('agent sessions', () => {
         sessionService.updateTitle(BOB, { id: session.id, title: 'Hacked' }),
       ).rejects.toThrow(NotFoundError);
 
-      await expect(sessionService.remove(BOB, { id: session.id })).rejects.toThrow(
-        NotFoundError,
-      );
+      await expect(
+        sessionService.remove(BOB, { id: session.id }),
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('missing session and someone else\'s session return the same error', async () => {
+    it("missing session and someone else's session return the same error", async () => {
       const session = await sessionService.create(ALICE, {});
       const fakeId = '000000000000000000000000';
 

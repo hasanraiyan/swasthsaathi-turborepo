@@ -39,7 +39,9 @@ function inputRequiresId(schema: z.ZodType): boolean {
  * medicine first) chain through the helper.
  */
 async function createRecordForCapability(
-  registry: { invoke: (name: string, actor: Actor, input?: unknown) => Promise<unknown> },
+  registry: {
+    invoke: (name: string, actor: Actor, input?: unknown) => Promise<unknown>;
+  },
   capabilityName: string,
   actor: Actor,
 ): Promise<string> {
@@ -47,82 +49,64 @@ async function createRecordForCapability(
 
   switch (domain) {
     case 'conditions': {
-      const r = (await registry.invoke(
-        'conditions.create',
-        actor,
-        { name: 'Ownership test condition', status: 'active' },
-      )) as { id: string };
+      const r = (await registry.invoke('conditions.create', actor, {
+        name: 'Ownership test condition',
+        status: 'active',
+      })) as { id: string };
       return r.id;
     }
     case 'doctors': {
-      const r = (await registry.invoke(
-        'doctors.create',
-        actor,
-        { name: 'Dr Ownership Test' },
-      )) as { id: string };
+      const r = (await registry.invoke('doctors.create', actor, {
+        name: 'Dr Ownership Test',
+      })) as { id: string };
       return r.id;
     }
     case 'medicines': {
-      const r = (await registry.invoke(
-        'medicines.create',
-        actor,
-        { name: 'Ownership test medicine' },
-      )) as { id: string };
+      const r = (await registry.invoke('medicines.create', actor, {
+        name: 'Ownership test medicine',
+      })) as { id: string };
       return r.id;
     }
     case 'medicationSchedules': {
       // Need a medicine first
-      const med = (await registry.invoke(
-        'medicines.create',
-        actor,
-        { name: 'Schedule test medicine' },
-      )) as { id: string };
-      const r = (await registry.invoke(
-        'medicationSchedules.create',
-        actor,
-        {
-          medicineId: med.id,
-          doseAmount: 1,
-          doseUnit: 'tablet',
-          timesOfDay: ['08:00'],
-          timing: 'anytime',
-        },
-      )) as { id: string };
+      const med = (await registry.invoke('medicines.create', actor, {
+        name: 'Schedule test medicine',
+      })) as { id: string };
+      const r = (await registry.invoke('medicationSchedules.create', actor, {
+        medicineId: med.id,
+        doseAmount: 1,
+        doseUnit: 'tablet',
+        timesOfDay: ['08:00'],
+        timing: 'anytime',
+      })) as { id: string };
       return r.id;
     }
     case 'appointments': {
-      const r = (await registry.invoke(
-        'appointments.create',
-        actor,
-        {
-          title: 'Ownership test appointment',
-          scheduledFor: '2026-09-01T10:00:00+05:30',
-        },
-      )) as { id: string };
+      const r = (await registry.invoke('appointments.create', actor, {
+        title: 'Ownership test appointment',
+        scheduledFor: '2026-09-01T10:00:00+05:30',
+      })) as { id: string };
       return r.id;
     }
     case 'symptoms': {
-      const r = (await registry.invoke(
-        'symptoms.log',
-        actor,
-        { name: 'headache', severity: 3 },
-      )) as { id: string };
+      const r = (await registry.invoke('symptoms.log', actor, {
+        name: 'headache',
+        severity: 3,
+      })) as { id: string };
       return r.id;
     }
     case 'measurements': {
-      const r = (await registry.invoke(
-        'measurements.record',
-        actor,
-        { type: 'weight', value: 70 },
-      )) as { id: string };
+      const r = (await registry.invoke('measurements.record', actor, {
+        type: 'weight',
+        value: 70,
+      })) as { id: string };
       return r.id;
     }
     case 'documents': {
-      const r = (await registry.invoke(
-        'documents.create',
-        actor,
-        { title: 'Ownership test document', kind: 'lab_report' },
-      )) as { id: string };
+      const r = (await registry.invoke('documents.create', actor, {
+        title: 'Ownership test document',
+        kind: 'lab_report',
+      })) as { id: string };
       return r.id;
     }
     default:
@@ -136,7 +120,9 @@ async function createRecordForCapability(
 
 describe('ownership', () => {
   let registry: ReturnType<typeof buildTestApp> extends Promise<infer T>
-    ? T extends { registry: infer R } ? R : never
+    ? T extends { registry: infer R }
+      ? R
+      : never
     : never;
   let close: () => Promise<void>;
 
@@ -175,7 +161,11 @@ describe('ownership', () => {
 
     for (const cap of readCaps) {
       it(`${cap.name}: bob cannot read alice's record`, async () => {
-        const aliceId = await createRecordForCapability(registry, cap.name, ALICE);
+        const aliceId = await createRecordForCapability(
+          registry,
+          cap.name,
+          ALICE,
+        );
 
         await expect(
           registry.invoke(cap.name, BOB, { id: aliceId }),
@@ -194,7 +184,11 @@ describe('ownership', () => {
 
     for (const cap of updateCaps) {
       it(`${cap.name}: bob cannot update alice's record`, async () => {
-        const aliceId = await createRecordForCapability(registry, cap.name, ALICE);
+        const aliceId = await createRecordForCapability(
+          registry,
+          cap.name,
+          ALICE,
+        );
 
         await expect(
           registry.invoke(cap.name, BOB, { id: aliceId, name: 'Hacked' }),
@@ -204,12 +198,18 @@ describe('ownership', () => {
 
     // Delete capabilities
     const deleteCaps = capsRequiringId.filter(
-      (c) => c.kind === 'write' && (c.name.endsWith('.delete') || c.name.endsWith('.stop')),
+      (c) =>
+        c.kind === 'write' &&
+        (c.name.endsWith('.delete') || c.name.endsWith('.stop')),
     );
 
     for (const cap of deleteCaps) {
       it(`${cap.name}: bob cannot delete alice's record`, async () => {
-        const aliceId = await createRecordForCapability(registry, cap.name, ALICE);
+        const aliceId = await createRecordForCapability(
+          registry,
+          cap.name,
+          ALICE,
+        );
 
         await expect(
           registry.invoke(cap.name, BOB, { id: aliceId }),
@@ -241,7 +241,7 @@ describe('ownership', () => {
   // --- Cross-user reference: bob must not link to alice's record -----------
 
   describe('cross-user references', () => {
-    it('bob creating a medicine with alice\'s conditionId is refused', async () => {
+    it("bob creating a medicine with alice's conditionId is refused", async () => {
       // Alice creates a condition
       const aliceCondition = (await registry.invoke(
         'conditions.create',
@@ -262,8 +262,12 @@ describe('ownership', () => {
   // --- Same error for missing vs. wrong owner -----------------------------
 
   describe('error equivalence', () => {
-    it('missing record and someone else\'s record return the same error', async () => {
-      const aliceId = await createRecordForCapability(registry, 'conditions.get', ALICE);
+    it("missing record and someone else's record return the same error", async () => {
+      const aliceId = await createRecordForCapability(
+        registry,
+        'conditions.get',
+        ALICE,
+      );
       const fakeId = '000000000000000000000000';
 
       let missingError: Error | null = null;

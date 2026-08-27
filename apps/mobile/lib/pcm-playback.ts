@@ -65,6 +65,33 @@ export class VoicePlayback {
     this.playlist.destroy();
   }
 
+  /** Attempt to prime web audio playback within a user gesture. */
+  prime(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            void ctx.resume();
+          }
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          gain.gain.value = 0;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(0);
+          osc.stop(ctx.currentTime + 0.001);
+        }
+      } catch {
+        // Ignore audio unlock errors
+      }
+    }
+  }
+
   private flushBuffer(): void {
     if (this.pending.length === 0 || this.stopped) {
       return;
@@ -74,7 +101,17 @@ export class VoicePlayback {
     const wav = wrapPcmAsWav(pcm, SAMPLE_RATE, CHANNELS, BYTES_PER_SAMPLE * 8);
     this.playlist.add(`data:audio/wav;base64,${bytesToBase64(wav)}`);
     if (!this.playlist.playing) {
-      this.playlist.play();
+      try {
+        const playPromise = this.playlist.play() as unknown;
+        if (
+          playPromise &&
+          typeof (playPromise as Promise<unknown>).catch === 'function'
+        ) {
+          (playPromise as Promise<unknown>).catch(() => undefined);
+        }
+      } catch {
+        // Ignore synchronous playback errors
+      }
     }
   }
 }

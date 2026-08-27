@@ -8,7 +8,9 @@ import { CHECK_RULES, type PreventionContext } from './catalogue';
  * case below describes a real scenario that matters for this product.
  */
 
-function baseCtx(overrides: Partial<PreventionContext> = {}): PreventionContext {
+function baseCtx(
+  overrides: Partial<PreventionContext> = {},
+): PreventionContext {
   return {
     age: null,
     sexAtBirth: null,
