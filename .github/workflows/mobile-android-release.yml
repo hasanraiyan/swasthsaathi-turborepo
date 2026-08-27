@@ -25,19 +25,12 @@ jobs:
     name: Build Android (${{ github.run_number }})
     runs-on: ubuntu-latest
     env:
-      # Points the built app at a local dev API tunneled through ngrok's free
-      # tier, whose URL is random and changes every time the tunnel restarts
-      # -- this value goes stale the moment that happens. Update it here (and
-      # in apps/mobile/.env.local for local builds) whenever the tunnel is
-      # restarted; without a live tunnel behind it, the app falls back to
-      # resolveBaseUrl()'s Metro-host guess, which is not reachable off the
-      # dev machine's network.
-      EXPO_PUBLIC_API_URL: https://f283-2401-4900-1686-2763-bdca-8fbe-9ecd-220a.ngrok-free.app/api
-      # Also inlined at bundle time, same as the API URL above. A publishable
-      # key is meant to be public -- pk_ vs sk_ is exactly that split -- so
-      # this is a plain value here rather than a secret. Without it the built
-      # app's ClerkProvider gets an empty key and sign-in fails outright.
-      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dXNlZnVsLWVzY2FyZ290LTEyMjUuY2xlcmsuYWNjb3VudHMuZGV2JA
+      # Production API URL (hosted on Render) — read from GitHub secret so it
+      # can be updated without touching the workflow file.
+      EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+      # Live Clerk publishable key for production — stored as a secret so
+      # local dev keys never leak into release builds.
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
