@@ -1,5 +1,7 @@
 import { bytesToBase64 } from './base64';
 
+const TAG = '[voice]';
+
 /**
  * Browser-native microphone capture using Web Audio API and getUserMedia.
  *
@@ -20,20 +22,28 @@ export class WebMicRecorder {
       typeof window === 'undefined' ||
       !window.navigator?.mediaDevices?.getUserMedia
     ) {
+      console.warn(`${TAG} getUserMedia is not available in this environment`);
       throw new Error('Microphone capture is not supported in this browser.');
     }
 
     this.stop();
 
-    const stream = await window.navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: 16_000,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    let stream: MediaStream;
+    try {
+      stream = await window.navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16_000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (error) {
+      console.warn(`${TAG} getUserMedia failed`, error);
+      throw error;
+    }
+    console.log(`${TAG} got mic stream (tracks=${stream.getAudioTracks().length})`);
     this.mediaStream = stream;
 
     const AudioCtx =
@@ -46,6 +56,7 @@ export class WebMicRecorder {
     if (ctx.state === 'suspended') {
       await ctx.resume();
     }
+    console.log(`${TAG} AudioContext state=${ctx.state}, sampleRate=${ctx.sampleRate}`);
 
     const source = ctx.createMediaStreamSource(stream);
     this.source = source;
@@ -61,6 +72,7 @@ export class WebMicRecorder {
     this.muteGain = muteGain;
 
     this.isRecording = true;
+    let chunkCount = 0;
 
     processor.onaudioprocess = (event: AudioProcessingEvent) => {
       if (!this.isRecording) {
@@ -80,6 +92,12 @@ export class WebMicRecorder {
           pcm16.byteLength,
         );
         onAudioChunk(bytesToBase64(uint8));
+        chunkCount += 1;
+        // One line every ~2.5s (at 2048-sample buffers) rather than per chunk,
+        // just enough to confirm audio is actually flowing.
+        if (chunkCount % 20 === 0) {
+          console.log(`${TAG} sent ${chunkCount} mic chunks so far`);
+        }
       }
     };
 
@@ -89,6 +107,7 @@ export class WebMicRecorder {
   }
 
   stop(): void {
+    console.log(`${TAG} stopping web mic`);
     this.isRecording = false;
     if (this.processor) {
       this.processor.onaudioprocess = null;

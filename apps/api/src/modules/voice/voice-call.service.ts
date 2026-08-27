@@ -95,10 +95,16 @@ class ActiveVoiceCall {
   handleMessage(raw: WebSocket.RawData): void {
     const parsed = this.parse(raw);
     if (!parsed) {
+      this.deps.logger.warn(
+        `Dropped an unparseable client frame from ${this.actor.userId}.`,
+      );
       return;
     }
     if (parsed.type === 'call.start') {
       if (!this.started) {
+        this.deps.logger.log(
+          `call.start received from ${this.actor.userId} (linkedSessionId=${parsed.sessionId ?? 'none'}).`,
+        );
         this.started = true;
         clearTimeout(this.startTimer);
         void this.start(parsed.sessionId);
@@ -113,6 +119,7 @@ class ActiveVoiceCall {
         audio: { data: parsed.data, mimeType: 'audio/pcm;rate=16000' },
       });
     } else if (parsed.type === 'call.end') {
+      this.deps.logger.log(`call.end received from ${this.actor.userId}.`);
       void this.end('caller_ended');
     }
   }
@@ -196,6 +203,9 @@ class ActiveVoiceCall {
       this.deps.maxCallMinutes * 60_000,
     );
 
+    this.deps.logger.log(
+      `Opening Gemini Live session for ${this.actor.userId} (model=${this.deps.model}).`,
+    );
     try {
       this.session = await this.connect();
     } catch (error) {
@@ -213,16 +223,35 @@ class ActiveVoiceCall {
       return;
     }
 
-    this.send({
-      type: 'call.ready',
-      callId: this.startedAt.getTime().toString(36),
-    });
+    const callId = this.startedAt.getTime().toString(36);
+    this.deps.logger.log(
+      `Gemini Live session open for ${this.actor.userId} (callId=${callId}).`,
+    );
+    this.send({ type: 'call.ready', callId });
   }
 
   private async onGeminiMessage(message: LiveServerMessage): Promise<void> {
     if (this.ended) {
       return;
     }
+
+    // A catch-all summary of every message Gemini sends, so a silent call
+    // (no audio, no transcript) can be told apart from Gemini sending
+    // nothing at all versus sending something this handler doesn't act on.
+    this.deps.logger.debug(
+      `Gemini message for ${this.actor.userId}: ${JSON.stringify({
+        hasData: Boolean(message.data),
+        dataLength: message.data?.length ?? 0,
+        turnComplete: message.serverContent?.turnComplete ?? false,
+        interrupted: message.serverContent?.interrupted ?? false,
+        inputTranscription: message.serverContent?.inputTranscription?.text,
+        outputTranscription: message.serverContent?.outputTranscription?.text,
+        modelTurnParts: message.serverContent?.modelTurn?.parts?.length ?? 0,
+        toolCall: message.toolCall?.functionCalls?.length ?? 0,
+        goAway: Boolean(message.goAway),
+        sessionResumptionUpdate: Boolean(message.sessionResumptionUpdate),
+      })}`,
+    );
 
     const { serverContent } = message;
     if (serverContent?.interrupted) {
@@ -298,6 +327,10 @@ class ActiveVoiceCall {
 
     const calls = message.toolCall?.functionCalls;
     if (calls?.length) {
+      const names = calls.map((call) => call.name).join(', ');
+      this.deps.logger.log(
+        `Gemini requested tool call(s) for ${this.actor.userId}: ${names}.`,
+      );
       const responses = await handleFunctionCalls(
         this.deps.registry,
         this.actor,
@@ -311,9 +344,13 @@ class ActiveVoiceCall {
     }
 
     if (message.goAway) {
+      this.deps.logger.log(
+        `Gemini sent goAway for ${this.actor.userId}; reconnecting.`,
+      );
       this.send({ type: 'reconnecting' });
       try {
         this.session = await this.connect(this.resumeHandle);
+        this.deps.logger.log(`Voice reconnect succeeded for ${this.actor.userId}.`);
         this.send({ type: 'reconnected' });
       } catch (error) {
         this.deps.logger.warn(
@@ -328,6 +365,9 @@ class ActiveVoiceCall {
     if (this.ended) {
       return;
     }
+    this.deps.logger.log(
+      `Ending call for ${this.actor.userId} (reason=${reason}, turns=${this.turns.length}).`,
+    );
     this.ended = true;
     clearTimeout(this.durationTimer);
     clearTimeout(this.startTimer);
@@ -426,12 +466,19 @@ export class VoiceCallService implements OnModuleInit {
       this.logger.warn(
         'GEMINI_API_KEY is not set -- voice calling will refuse to start.',
       );
+    } else {
+      this.logger.log(
+        `Voice calling configured (model=${this.modelName}, maxCallMinutes=${this.maxCallMinutes}, callsPerHour=${this.callsPerHour}).`,
+      );
     }
   }
 
   /** Wire a freshly-authenticated WebSocket into a voice call. */
   handleConnection(client: WebSocket, actor: Actor): void {
     if (!this.isConfigured) {
+      this.logger.warn(
+        `Rejected voice call for ${actor.userId}: server not configured (GEMINI_API_KEY missing).`,
+      );
       this.reject(
         client,
         'not_configured',
@@ -440,6 +487,9 @@ export class VoiceCallService implements OnModuleInit {
       return;
     }
     if (activeCalls.has(actor.userId)) {
+      this.logger.warn(
+        `Rejected voice call for ${actor.userId}: call already in progress.`,
+      );
       this.reject(
         client,
         'call_in_progress',
@@ -449,6 +499,9 @@ export class VoiceCallService implements OnModuleInit {
     }
     const quota = this.limiter.take(actor.userId);
     if (!quota.allowed) {
+      this.logger.warn(
+        `Rejected voice call for ${actor.userId}: rate limited (retry in ${quota.retryInMinutes}m).`,
+      );
       this.reject(
         client,
         'rate_limited',
@@ -457,6 +510,7 @@ export class VoiceCallService implements OnModuleInit {
       return;
     }
 
+    this.logger.log(`Admitted voice call for ${actor.userId}.`);
     const call = new ActiveVoiceCall(client, actor, {
       ai: new GoogleGenAI({ apiKey: this.apiKey() }),
       model: this.modelName,

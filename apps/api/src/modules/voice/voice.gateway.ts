@@ -28,6 +28,7 @@ export class VoiceGateway implements OnGatewayConnection {
     client: WebSocket,
     request: IncomingMessage,
   ): Promise<void> {
+    this.logger.log(`Voice socket connecting from ${request.socket.remoteAddress ?? 'unknown'}.`);
     const token = new URL(
       request.url ?? '',
       'http://voice.internal',
@@ -38,10 +39,12 @@ export class VoiceGateway implements OnGatewayConnection {
       // request would get. There is no response body on a WS close, which is
       // exactly why the gateway checks this before `VoiceCallService` ever
       // gets a chance to send a JSON error frame.
+      this.logger.warn('Voice socket rejected: unauthorized.');
       client.close(4401, 'unauthorized');
       return;
     }
 
+    this.logger.log(`Voice socket authenticated for user ${identity.userId}.`);
     this.calls.handleConnection(client, { userId: identity.userId });
   }
 }

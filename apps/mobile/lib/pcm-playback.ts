@@ -3,6 +3,8 @@ import type { AudioPlaylist } from 'expo-audio';
 
 import { base64ToBytes, bytesToBase64 } from './base64';
 
+const TAG = '[voice]';
+
 /**
  * Plays Gemini's streamed 24kHz 16-bit PCM audio as it arrives.
  *
@@ -52,6 +54,7 @@ export class VoicePlayback {
 
   /** The user started talking over the reply -- drop everything queued now. */
   flush(): void {
+    console.log(`${TAG} playback flushed (barge-in)`);
     this.pending = [];
     this.playlist.clear();
   }
@@ -60,6 +63,7 @@ export class VoicePlayback {
     if (this.stopped) {
       return;
     }
+    console.log(`${TAG} playback stopped`);
     this.stopped = true;
     this.pending = [];
     this.playlist.destroy();
@@ -85,9 +89,10 @@ export class VoicePlayback {
           gain.connect(ctx.destination);
           osc.start(0);
           osc.stop(ctx.currentTime + 0.001);
+          console.log(`${TAG} playback primed (AudioContext state=${ctx.state})`);
         }
-      } catch {
-        // Ignore audio unlock errors
+      } catch (error) {
+        console.warn(`${TAG} playback prime failed`, error);
       }
     }
   }
@@ -98,6 +103,7 @@ export class VoicePlayback {
     }
     const pcm = Uint8Array.from(this.pending);
     this.pending = [];
+    console.log(`${TAG} queuing playback track (${pcm.length} PCM bytes)`);
     const wav = wrapPcmAsWav(pcm, SAMPLE_RATE, CHANNELS, BYTES_PER_SAMPLE * 8);
     this.playlist.add(`data:audio/wav;base64,${bytesToBase64(wav)}`);
     if (!this.playlist.playing) {
@@ -107,10 +113,12 @@ export class VoicePlayback {
           playPromise &&
           typeof (playPromise as Promise<unknown>).catch === 'function'
         ) {
-          (playPromise as Promise<unknown>).catch(() => undefined);
+          (playPromise as Promise<unknown>).catch((error: unknown) =>
+            console.warn(`${TAG} playback play() rejected`, error),
+          );
         }
-      } catch {
-        // Ignore synchronous playback errors
+      } catch (error) {
+        console.warn(`${TAG} playback play() threw synchronously`, error);
       }
     }
   }

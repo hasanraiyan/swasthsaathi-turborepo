@@ -11,6 +11,8 @@ import { VoiceCallClient } from '../../lib/voice-call';
 import type { VoiceCallState } from '../../lib/voice-call';
 import { WebMicRecorder } from '../../lib/web-mic';
 
+const TAG = '[voice]';
+
 export interface TranscriptLine {
   role: 'user' | 'assistant';
   text: string;
@@ -64,25 +66,30 @@ export function useVoiceCall(sessionId?: string) {
     playbackRef.current = playback;
 
     const startMic = async () => {
+      console.log(`${TAG} starting mic (platform=${Platform.OS})`);
       if (Platform.OS === 'web') {
         await webMicRef.current.start((chunk) => {
           clientRef.current?.sendAudioChunk(chunk);
         });
         micStarted = true;
+        console.log(`${TAG} web mic started`);
         return;
       }
 
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
+        console.warn(`${TAG} microphone permission denied`);
         throw new Error('Microphone permission denied');
       }
       await streamRef.current?.start?.();
       micStarted = true;
+      console.log(`${TAG} native mic stream started`);
     };
 
     const stopMic = () => {
       if (micStarted) {
         micStarted = false;
+        console.log(`${TAG} stopping mic (platform=${Platform.OS})`);
         if (Platform.OS === 'web') {
           webMicRef.current.stop();
         } else {
@@ -98,9 +105,10 @@ export function useVoiceCall(sessionId?: string) {
         }
         setStatus(state);
         if (state === 'active' && !micStarted) {
-          startMic().catch(() =>
-            setErrorMessage('Could not access the microphone.'),
-          );
+          startMic().catch((error: unknown) => {
+            console.warn(`${TAG} mic start failed`, error);
+            setErrorMessage('Could not access the microphone.');
+          });
         }
         if (state === 'ended' || state === 'error') {
           stopMic();
@@ -126,7 +134,8 @@ export function useVoiceCall(sessionId?: string) {
     });
     clientRef.current = client;
 
-    client.connect(() => getToken(), sessionId).catch(() => {
+    client.connect(() => getToken(), sessionId).catch((error: unknown) => {
+      console.warn(`${TAG} connect failed`, error);
       if (!cancelled) {
         setStatus('error');
         setErrorMessage('Could not start the call.');

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type {
   FunctionCall,
   FunctionDeclaration,
@@ -7,6 +8,8 @@ import type { Actor } from '@repo/contracts';
 
 import type { CapabilityRegistry } from '../../capabilities/capability-registry.service';
 import { DomainError } from '../../common/errors';
+
+const logger = new Logger('VoiceTools');
 
 /**
  * The capability catalogue, as Gemini function declarations.
@@ -44,6 +47,7 @@ export async function handleFunctionCalls(
     calls.map(async (call): Promise<FunctionResponse> => {
       try {
         const result = await registry.invoke(call.name ?? '', actor, call.args);
+        logger.log(`Tool ${call.name} succeeded for ${actor.userId}.`);
         return {
           id: call.id,
           name: call.name,
@@ -52,6 +56,9 @@ export async function handleFunctionCalls(
       } catch (error) {
         const message =
           error instanceof DomainError ? error.message : 'That did not work.';
+        logger.warn(
+          `Tool ${call.name} failed for ${actor.userId}: ${String(error)}`,
+        );
         return { id: call.id, name: call.name, response: { error: message } };
       }
     }),
