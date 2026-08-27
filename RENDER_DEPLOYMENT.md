@@ -35,7 +35,7 @@ master
 
 ### Build Command
 ```bash
-corepack enable && pnpm install --frozen-lockfile && pnpm --filter @repo/contracts build && pnpm --filter api build
+npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @repo/contracts build && pnpm --filter api build
 ```
 
 ### Start Command
