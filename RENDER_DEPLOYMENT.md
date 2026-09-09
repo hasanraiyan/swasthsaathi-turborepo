@@ -99,3 +99,11 @@ AGENT_RUNS_PER_HOUR=30
 ```env
 VOICE_CALLS_PER_HOUR=20
 ```
+
+```env
+PERSONA_BASE_URL=https://persona.hasanraiyan.me
+```
+
+```env
+PERSONA_CREDENTIAL=your_persona_project_key_or_secret
+```

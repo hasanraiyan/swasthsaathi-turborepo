@@ -66,6 +66,18 @@ importers:
       '@nestjs/websockets':
         specifier: ^11.2.3
         version: 11.2.3(@nestjs/common@11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@personaai/adapters':
+        specifier: ^0.1.0
+        version: 0.1.0(@nestjs/common@11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)(express@5.2.1)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.4.3)
+      '@personaai/logger':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@personaai/runtime':
+        specifier: ^0.9.5
+        version: 0.9.5(zod@4.4.3)
+      '@personaai/sdk':
+        specifier: ^0.7.5
+        version: 0.7.5(zod@4.4.3)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -301,6 +313,9 @@ packages:
 
   '@ag-ui/client@0.0.58':
     resolution: {integrity: sha512-9tAUJ6Ot0y2f5Va7xGFhUSO5OPAjilMsPdmKNmAUR774LKWcvNpriJ6mqH3p/ewUue1zfoUo4vpX+9Xo/zsuzA==}
+
+  '@ag-ui/core@0.0.57':
+    resolution: {integrity: sha512-gho1OWjNE6E3Rl7ZEZ1wr2CEpUHjLFU0FqzCZZk439TicLu+BfLCMkMokB07bMGlRmbJ60hM6LW60iOVauCx+Q==}
 
   '@ag-ui/core@0.0.58':
     resolution: {integrity: sha512-XgGb7YmhV+yMBaEmlrpsd5S+nUxq0JgSegss2t4gIFR1j7w3w0ibtKfRgcQHWeMvwZxcT5S28VEEarqtgxYYHw==}
@@ -1674,6 +1689,57 @@ packages:
 
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
+
+  '@personaai/adapters@0.1.0':
+    resolution: {integrity: sha512-EB5zXeXtdhlb22D4HbL7nhEiaxglGLsBT4sNciTBRK9JyPobEBLhlU2k5bNK/nx0fA5GGVc6DBX/1ea+f+FgJA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@nestjs/common': ^10.0.0 || ^11.0.0
+      '@nestjs/core': ^10.0.0 || ^11.0.0
+      express: '>=4'
+      next: '>=14'
+      react: '>=18.0.0'
+      reflect-metadata: ^0.1.13 || ^0.2.0
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      '@nestjs/common':
+        optional: true
+      '@nestjs/core':
+        optional: true
+      express:
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      reflect-metadata:
+        optional: true
+      rxjs:
+        optional: true
+
+  '@personaai/logger@0.1.0':
+    resolution: {integrity: sha512-ra5T+aBNzDmiabJ161y87SJJT9x3MHuFfAL1UCxSY3IO6AOJtF5UcXdsLVcxkugeOIto6Ppsm+adGLLR9s50Kw==}
+    engines: {node: '>=18'}
+
+  '@personaai/react@0.7.10':
+    resolution: {integrity: sha512-RW2ZGL/0cNaEQiib4dq16CPUjwMbF4YMRWAsJm+KppgjVVj+DqdExkIRNfK3WupNH59/5bB/Tx4DPhnrMiiEZw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18.0.0'
+      react-dom: '>=18.0.0'
+
+  '@personaai/runtime@0.9.5':
+    resolution: {integrity: sha512-VcwPbANXlOwmBQPiZVlHR5XpuIMX+TrBmytkNfpVat70lX6fDBVwBXAuLKdUZT3/BRkrLDkg9TP37iUUYbj38w==}
+    engines: {node: '>=18'}
+
+  '@personaai/sdk@0.7.5':
+    resolution: {integrity: sha512-VP7Vg0phZ1FJ13VDS6Q9ct9sWX8N5Z8GCH+0+0Vu39r3FoKoDHC4EANNp/AyRhesEsL8jdcxND4WioIJSn+3Zg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.23.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -6413,6 +6479,10 @@ packages:
     resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
     engines: {node: '>= 0.10'}
 
+  rcp-sdk@0.1.1:
+    resolution: {integrity: sha512-656fAOyv2HnDwULGi3A19nsi/wR+3AvSgUnfhjc31PJzb2zS4EOficPFoqXb3wTx7ynIGs7+DB4xteXKeKbAwA==}
+    engines: {node: '>=18'}
+
   react-devtools-core@6.1.5:
     resolution: {integrity: sha512-ePrwPfxAnB+7hgnEr8vpKxL9cmnp7F322t8oqcPshbIQQhDKgFDW4tjhF2wjVbdXF9O/nyuy3sQWd9JGpiLPvA==}
 
@@ -7679,6 +7749,10 @@ snapshots:
       rxjs: 7.8.1
       untruncate-json: 0.0.1
       uuid: 11.1.1
+      zod: 3.25.76
+
+  '@ag-ui/core@0.0.57':
+    dependencies:
       zod: 3.25.76
 
   '@ag-ui/core@0.0.58':
@@ -9578,6 +9652,46 @@ snapshots:
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
+
+  '@personaai/adapters@0.1.0(@nestjs/common@11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)(express@5.2.1)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.4.3)':
+    dependencies:
+      '@personaai/logger': 0.1.0
+      '@personaai/react': 0.7.10(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@personaai/runtime': 0.9.5(zod@4.4.3)
+      '@personaai/sdk': 0.7.5(zod@4.4.3)
+    optionalDependencies:
+      '@nestjs/common': 11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 11.2.3(@nestjs/common@11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.3)(@nestjs/websockets@11.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      express: 5.2.1
+      react: 19.2.3
+      reflect-metadata: 0.2.2
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - react-dom
+      - zod
+
+  '@personaai/logger@0.1.0': {}
+
+  '@personaai/react@0.7.10(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      '@personaai/logger': 0.1.0
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
+
+  '@personaai/runtime@0.9.5(zod@4.4.3)':
+    dependencies:
+      '@ag-ui/core': 0.0.57
+      '@personaai/sdk': 0.7.5(zod@4.4.3)
+      rcp-sdk: 0.1.1
+    transitivePeerDependencies:
+      - zod
+
+  '@personaai/sdk@0.7.5(zod@4.4.3)':
+    dependencies:
+      '@ag-ui/core': 0.0.57
+      '@personaai/logger': 0.1.0
+    optionalDependencies:
+      zod: 4.4.3
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
@@ -15347,6 +15461,10 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.7.3
       unpipe: 1.0.0
+
+  rcp-sdk@0.1.1:
+    dependencies:
+      zod: 3.25.76
 
   react-devtools-core@6.1.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
