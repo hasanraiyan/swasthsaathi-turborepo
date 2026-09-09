@@ -1,5 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from 'react-native';
 
 import { colors, radii, spacing, type } from '../../theme';
@@ -19,14 +19,15 @@ export interface ReasoningData {
 
 export function ReasoningBlock({ reasoning }: { reasoning: ReasoningData }) {
   const isStreaming = Boolean(reasoning.isStreaming);
-  // Auto-open while streaming, auto-collapse once finished unless manually toggled
   const [open, setOpen] = useState<boolean>(isStreaming);
+  const [prevIsStreaming, setPrevIsStreaming] = useState<boolean>(isStreaming);
 
-  useEffect(() => {
+  if (isStreaming !== prevIsStreaming) {
+    setPrevIsStreaming(isStreaming);
     if (isStreaming) {
       setOpen(true);
     }
-  }, [isStreaming]);
+  }
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
