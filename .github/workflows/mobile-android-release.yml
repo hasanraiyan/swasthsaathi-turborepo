@@ -27,10 +27,8 @@ jobs:
     env:
       # Production API URL (hosted on Render) — read from GitHub secret so it
       # can be updated without touching the workflow file.
-      EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
-      # Live Clerk publishable key for production — stored as a secret so
-      # local dev keys never leak into release builds.
-      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL || 'https://api.swasthsaathi.hasanraiyan.me/api' }}
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_dXNlZnVsLWVzY2FyZ290LTEyMjUuY2xlcmsuYWNjb3VudHMuZGV2JA' }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
