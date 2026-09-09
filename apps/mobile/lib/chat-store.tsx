@@ -1,4 +1,9 @@
-import { useChat as usePersonaChat, useThreads } from '@personaai/react';
+import {
+  useChat as usePersonaChat,
+  useThreads,
+  useVoice,
+  type PersonaVoiceState,
+} from '@personaai/react';
 import type {
   AgentFile,
   AgentTodo,
@@ -28,6 +33,15 @@ export interface Conversation {
   updatedAt: string;
 }
 
+export interface VoiceControl {
+  state: PersonaVoiceState;
+  isMuted: boolean;
+  isActive: boolean;
+  start: () => Promise<void>;
+  stop: () => void;
+  mute: (muted: boolean) => void;
+}
+
 interface ChatContextValue {
   conversations: Conversation[];
   activeConversation: (Conversation & { turns: TranscriptTurn[] }) | null;
@@ -49,6 +63,7 @@ interface ChatContextValue {
   /** Rejects on failure so the drawer's dialog can show it inline and stay open. */
   deleteConversation: (id: string) => Promise<void>;
   fileAt: (filePath: string) => AgentFile | null;
+  voice: VoiceControl;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -76,6 +91,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     refetch: refetchThreads,
   } = useThreads();
 
+  const voiceInstance = useVoice({
+    agentId: PERSONA_AGENT_ID,
+    threadId: activeId ?? undefined,
+  });
+
   const {
     messages,
     sendMessage: personaSendMessage,
@@ -91,6 +111,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   } = usePersonaChat({
     agentId: PERSONA_AGENT_ID,
     threadId: activeId ?? undefined,
+    voice: voiceInstance,
   });
 
   const conversations: Conversation[] = useMemo(() => {
@@ -256,6 +277,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return conversation ? { ...conversation, turns } : null;
   }, [conversations, activeId, turns]);
 
+  const isVoiceActive =
+    voiceInstance.state !== 'idle' &&
+    voiceInstance.state !== 'ended' &&
+    voiceInstance.state !== 'error';
+
+  const voice: VoiceControl = useMemo(
+    () => ({
+      state: voiceInstance.state,
+      isMuted: voiceInstance.isMuted,
+      isActive: isVoiceActive,
+      start: voiceInstance.start,
+      stop: voiceInstance.stop,
+      mute: voiceInstance.mute,
+    }),
+    [
+      voiceInstance.state,
+      voiceInstance.isMuted,
+      isVoiceActive,
+      voiceInstance.start,
+      voiceInstance.stop,
+      voiceInstance.mute,
+    ],
+  );
+
   const value = useMemo<ChatContextValue>(
     () => ({
       conversations,
@@ -275,6 +320,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       renameConversation,
       deleteConversation,
       fileAt,
+      voice,
     }),
     [
       conversations,
@@ -294,6 +340,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       renameConversation,
       deleteConversation,
       fileAt,
+      voice,
     ],
   );
 

@@ -45,6 +45,7 @@ export default function ChatScreen() {
     answerApproval,
     newChat,
     fileAt,
+    voice,
   } = useChat();
 
   const [openFile, setOpenFile] = useState<AgentFile | null>(null);
@@ -161,12 +162,24 @@ export default function ChatScreen() {
               onChangeText={setDraft}
               onSend={() => sendMessage(draft)}
               disabled={pending}
-              onVoiceToggle={() =>
-                router.push(
-                  activeConversation
-                    ? { pathname: '/call', params: { sessionId: activeConversation.id } }
-                    : '/call',
-                )
+              onVoiceToggle={() => {
+                if (voice.isActive) {
+                  voice.stop();
+                } else {
+                  voice.start().catch((err: unknown) => {
+                    console.warn('[voice] Start failed:', err);
+                  });
+                }
+              }}
+              isVoiceActive={voice.isActive}
+              voiceStatusText={
+                voice.state === 'speaking'
+                  ? 'Saathi is speaking…'
+                  : voice.state === 'thinking'
+                    ? 'Saathi is thinking…'
+                    : voice.state === 'listening'
+                      ? 'Listening… (speak out loud)'
+                      : 'Connecting voice…'
               }
             />
           </View>
