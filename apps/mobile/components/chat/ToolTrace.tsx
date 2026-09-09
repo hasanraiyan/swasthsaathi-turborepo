@@ -5,10 +5,11 @@ import type {
   HealthSnapshot,
   MeasurementTrend,
   PreventivePlan,
-  TranscriptToolCall,
 } from '@repo/contracts';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import type { TranscriptToolCall } from '../../lib/chat-store';
 
 import { diffLines, diffStat } from '../../lib/diff';
 import { summarizerFor } from '../../lib/domain-records';

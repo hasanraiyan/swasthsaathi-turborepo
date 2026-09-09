@@ -1,10 +1,11 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { AgentTodo, TranscriptTurn } from '@repo/contracts';
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
+import type { AgentTodo, TranscriptTurn } from '../../lib/chat-store';
 import { groupToolCalls } from '../../lib/tool-groups';
 import { colors, radii, spacing, type } from '../../theme';
+import { ReasoningBlock } from './ReasoningBlock';
 import { TodoChecklist } from './TodoChecklist';
 import { ToolTrace } from './ToolTrace';
 import { ToolTraceGroup } from './ToolTraceGroup';
@@ -37,7 +38,12 @@ export function Turn({ turn, onOpenFile }: TurnProps) {
 
   return (
     <View style={styles.assistant}>
-      {/* Above the text: the work happened before the answer did. Several
+      {/* Above the text: clinical reasoning / chain-of-thought blocks */}
+      {turn.reasoning?.map((r) => (
+        <ReasoningBlock key={r.id} reasoning={r} />
+      ))}
+
+      {/* The work happened before the answer did. Several
           calls in a row read as one thing, not a list of separate steps. */}
       {groupToolCalls(turn.toolCalls).map((item) =>
         item.kind === 'group' ? (

@@ -1,5 +1,4 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { AgentFile } from '@repo/contracts';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
@@ -17,7 +16,7 @@ import { Composer } from '../components/chat/Composer';
 import { FileViewer } from '../components/chat/FileViewer';
 import { IntentCards } from '../components/chat/IntentCards';
 import { ApprovalPrompt, Plan, Thinking, Turn } from '../components/chat/MessageList';
-import { useChat } from '../lib/chat-store';
+import { useChat, type AgentFile } from '../lib/chat-store';
 import { useDrawer } from '../lib/navigation';
 import { colors, contentMaxWidth, spacing, type } from '../theme';
 

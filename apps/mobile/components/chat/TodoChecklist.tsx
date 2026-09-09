@@ -1,5 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { AgentTodo } from '@repo/contracts';
+import type { AgentTodo } from '../../lib/chat-store';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing, statusColors, type } from '../../theme';

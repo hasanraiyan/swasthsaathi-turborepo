@@ -4,12 +4,6 @@ import {
   useVoice,
   type PersonaVoiceState,
 } from '@personaai/react';
-import type {
-  AgentFile,
-  AgentTodo,
-  PendingApproval,
-  TranscriptTurn,
-} from '@repo/contracts';
 import {
   createContext,
   useCallback,
@@ -40,6 +34,46 @@ export interface VoiceControl {
   start: () => Promise<void>;
   stop: () => void;
   mute: (muted: boolean) => void;
+}
+
+export interface TranscriptToolCall {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  result: string | null;
+  isError: boolean;
+}
+
+export interface TranscriptReasoning {
+  id: string;
+  content: string;
+  isStreaming?: boolean;
+}
+
+export interface TranscriptTurn {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  toolCalls: TranscriptToolCall[];
+  reasoning?: TranscriptReasoning[];
+}
+
+export interface AgentTodo {
+  content: string;
+  status: string;
+}
+
+export interface AgentFile {
+  path: string;
+  content: string;
+  size: number;
+}
+
+export interface PendingApproval {
+  index: number;
+  toolName: string;
+  description: string;
+  args: Record<string, unknown>;
 }
 
 interface ChatContextValue {
@@ -125,20 +159,60 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [threads]);
 
   const turns = useMemo<TranscriptTurn[]>(() => {
-    return messages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content || '',
-        toolCalls: (m.toolCalls ?? []).map((tc) => ({
-          toolCallId: tc.toolCallId,
-          toolName: tc.toolName.replace(/__/g, '.'),
-          args: parseArgs(tc.args),
-          result: tc.result ?? null,
-          isError: tc.isError ?? false,
-        })),
-      }));
+    const list: TranscriptTurn[] = [];
+    let pendingReasoning: TranscriptReasoning[] = [];
+
+    for (const m of messages) {
+      if (m.role === 'reasoning') {
+        if (m.content || m.isStreaming) {
+          pendingReasoning.push({
+            id: m.id,
+            content: m.content || '',
+            isStreaming: m.isStreaming,
+          });
+        }
+        continue;
+      }
+
+      if (m.role === 'user') {
+        list.push({
+          id: m.id,
+          role: 'user',
+          content: m.content || '',
+          toolCalls: [],
+        });
+        continue;
+      }
+
+      if (m.role === 'assistant') {
+        list.push({
+          id: m.id,
+          role: 'assistant',
+          content: m.content || '',
+          toolCalls: (m.toolCalls ?? []).map((tc) => ({
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName.replace(/__/g, '.'),
+            args: parseArgs(tc.args),
+            result: tc.result ?? null,
+            isError: tc.isError ?? false,
+          })),
+          reasoning: pendingReasoning.length > 0 ? pendingReasoning : undefined,
+        });
+        pendingReasoning = [];
+      }
+    }
+
+    if (pendingReasoning.length > 0) {
+      list.push({
+        id: `reasoning-turn-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        toolCalls: [],
+        reasoning: pendingReasoning,
+      });
+    }
+
+    return list;
   }, [messages]);
 
   const todos = useMemo<AgentTodo[]>(() => {

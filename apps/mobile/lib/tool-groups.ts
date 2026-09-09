@@ -1,4 +1,4 @@
-import type { TranscriptToolCall } from '@repo/contracts';
+import type { TranscriptToolCall } from './chat-store';
 
 /**
  * How one turn's tool calls become rows in the thread.

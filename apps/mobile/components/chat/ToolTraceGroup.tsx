@@ -1,5 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { TranscriptToolCall } from '@repo/contracts';
+import type { TranscriptToolCall } from '../../lib/chat-store';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 

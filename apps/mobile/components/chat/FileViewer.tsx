@@ -1,5 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
-import type { AgentFile } from '@repo/contracts';
+import type { AgentFile } from '../../lib/chat-store';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
