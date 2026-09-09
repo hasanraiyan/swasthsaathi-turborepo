@@ -1,28 +1,7 @@
-import { useAuth } from '@clerk/expo';
-import type { VoiceServerMessage } from '@repo/contracts';
-import { requestRecordingPermissionsAsync, useAudioStream } from 'expo-audio';
-import type { AudioStreamBuffer } from 'expo-audio';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { useVoice } from '@personaai/react';
+import { useEffect, useMemo, useRef } from 'react';
 
-import { bytesToBase64 } from '../../lib/base64';
-import { VoicePlayback } from '../../lib/pcm-playback';
-import { VoiceCallClient } from '../../lib/voice-call';
-import type { VoiceCallState } from '../../lib/voice-call';
-import { WebMicRecorder } from '../../lib/web-mic';
-
-const TAG = '[voice]';
-
-/**
- * How far behind real time to hold the assistant's caption, so it doesn't
- * visibly outrun the audio the person is actually hearing.
- *
- * `pcm-playback.ts` only starts a track once it has ~400ms of PCM buffered
- * (plus some decode/start overhead) -- transcript messages carry no such
- * delay, so without this the caption for a line would render well before its
- * audio is heard.
- */
-const CAPTION_SYNC_DELAY_MS = 450;
+import { PERSONA_AGENT_ID } from '../../lib/chat-store';
 
 export interface TranscriptLine {
   role: 'user' | 'assistant';
@@ -31,168 +10,82 @@ export interface TranscriptLine {
   committed: boolean;
 }
 
+export type VoiceCallState =
+  | 'connecting'
+  | 'ready'
+  | 'active'
+  | 'reconnecting'
+  | 'ended'
+  | 'error';
+
 /**
- * A voice call end to end: opens the relay, starts the mic only once the
- * call is actually accepted (never for a call rejected as already-in-progress
- * or rate-limited), plays back what comes in, and tears everything down on
- * unmount or hangup.
- *
- * Capture uses `expo-audio`'s `useAudioStream` on native, and a browser-native
- * Web Audio API recorder (`WebMicRecorder`) on web where `useAudioStream` is a stub.
- * Playback (`lib/pcm-playback.ts`) wraps streamed PCM chunks in WAV containers
- * for seamless playback.
+ * Connects the UI to Persona's real-time voice session using @personaai/react.
  */
-export function useVoiceCall(sessionId?: string) {
-  const { getToken } = useAuth();
-  const [status, setStatus] = useState<VoiceCallState>('connecting');
-  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const clientRef = useRef<VoiceCallClient | null>(null);
-  const playbackRef = useRef<VoicePlayback | null>(null);
-  const webMicRef = useRef<WebMicRecorder>(new WebMicRecorder());
-
-  const { stream } = useAudioStream({
-    sampleRate: 16_000,
-    channels: 1,
-    encoding: 'int16',
-    onBuffer: (buffer: AudioStreamBuffer) => {
-      clientRef.current?.sendAudioChunk(
-        bytesToBase64(new Uint8Array(buffer.data)),
-      );
-    },
+export function useVoiceCall(sessionId?: string): {
+  status: VoiceCallState;
+  transcript: TranscriptLine[];
+  errorMessage: string | null;
+  endCall: () => void;
+} {
+  const voice = useVoice({
+    agentId: PERSONA_AGENT_ID,
+    threadId: sessionId,
   });
-  // A ref rather than a dependency: `useAudioStream` returns a new `stream`
-  // object each render, and the effect below must only run once per call.
-  const streamRef = useRef(stream);
-  useEffect(() => {
-    streamRef.current = stream;
-  }, [stream]);
+
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let micStarted = false;
-    const playback = new VoicePlayback();
-    playback.prime();
-    playbackRef.current = playback;
-
-    const startMic = async () => {
-      console.log(`${TAG} starting mic (platform=${Platform.OS})`);
-      if (Platform.OS === 'web') {
-        await webMicRef.current.start((chunk) => {
-          clientRef.current?.sendAudioChunk(chunk);
-        });
-        micStarted = true;
-        console.log(`${TAG} web mic started`);
-        return;
-      }
-
-      const { granted } = await requestRecordingPermissionsAsync();
-      if (!granted) {
-        console.warn(`${TAG} microphone permission denied`);
-        throw new Error('Microphone permission denied');
-      }
-      await streamRef.current?.start?.();
-      micStarted = true;
-      console.log(`${TAG} native mic stream started`);
-    };
-
-    const stopMic = () => {
-      if (micStarted) {
-        micStarted = false;
-        console.log(`${TAG} stopping mic (platform=${Platform.OS})`);
-        if (Platform.OS === 'web') {
-          webMicRef.current.stop();
-        } else {
-          streamRef.current?.stop?.();
-        }
-      }
-    };
-
-    const client = new VoiceCallClient({
-      onStateChange: (state) => {
-        if (cancelled) {
-          return;
-        }
-        setStatus(state);
-        if (state === 'active' && !micStarted) {
-          startMic().catch((error: unknown) => {
-            console.warn(`${TAG} mic start failed`, error);
-            setErrorMessage('Could not access the microphone.');
-          });
-        }
-        if (state === 'ended' || state === 'error') {
-          stopMic();
-          playback.stop();
-        }
-      },
-      onMessage: (message: VoiceServerMessage) => {
-        if (cancelled) {
-          return;
-        }
-        if (message.type === 'audio') {
-          playback.enqueue(message.data);
-        } else if (message.type === 'transcript') {
-          if (message.role === 'assistant') {
-            setTimeout(() => {
-              if (!cancelled) {
-                setTranscript((current) => upsertTranscript(current, message));
-              }
-            }, CAPTION_SYNC_DELAY_MS);
-          } else {
-            setTranscript((current) => upsertTranscript(current, message));
-          }
-        } else if (message.type === 'interrupted') {
-          // The user started talking over the reply -- stop playing what is
-          // already queued rather than let it keep going underneath them.
-          playback.flush();
-        } else if (message.type === 'call.error') {
-          setErrorMessage(message.message);
-        }
-      },
-    });
-    clientRef.current = client;
-
-    client.connect(() => getToken(), sessionId).catch((error: unknown) => {
-      console.warn(`${TAG} connect failed`, error);
-      if (!cancelled) {
-        setStatus('error');
-        setErrorMessage('Could not start the call.');
-      }
-    });
+    if (!startedRef.current) {
+      startedRef.current = true;
+      voice.start().catch((err: unknown) => {
+        console.warn('[voice] Failed to start voice session:', err);
+      });
+    }
 
     return () => {
-      cancelled = true;
-      stopMic();
-      playback.stop();
-      clientRef.current?.close();
-      clientRef.current = null;
+      voice.stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect once per screen visit
-  }, [sessionId]);
+  }, [voice]);
 
-  const endCall = useCallback(() => {
-    if (Platform.OS === 'web') {
-      webMicRef.current.stop();
-    } else {
-      streamRef.current?.stop?.();
+  const status: VoiceCallState = useMemo(() => {
+    switch (voice.state) {
+      case 'listening':
+      case 'speaking':
+      case 'thinking':
+        return 'active';
+      case 'ended':
+        return 'ended';
+      case 'error':
+        return 'error';
+      case 'connecting':
+      case 'idle':
+      default:
+        return 'connecting';
     }
-    clientRef.current?.end();
-  }, []);
+  }, [voice.state]);
 
-  return { status, transcript, errorMessage, endCall };
-}
+  const transcript: TranscriptLine[] = useMemo(() => {
+    const list: TranscriptLine[] = (voice.transcript ?? []).map((line) => ({
+      role: line.speaker === 'agent' ? 'assistant' : 'user',
+      text: line.text,
+      committed: true,
+    }));
 
-function upsertTranscript(
-  current: TranscriptLine[],
-  message: Extract<VoiceServerMessage, { type: 'transcript' }>,
-): TranscriptLine[] {
-  const last = current.at(-1);
-  if (last && last.role === message.role && !last.committed) {
-    return [
-      ...current.slice(0, -1),
-      { role: message.role, text: message.text, committed: message.final },
-    ];
-  }
-  return [...current, { role: message.role, text: message.text, committed: message.final }];
+    if (voice.partial && voice.partial.text) {
+      list.push({
+        role: voice.partial.speaker === 'agent' ? 'assistant' : 'user',
+        text: voice.partial.text,
+        committed: false,
+      });
+    }
+
+    return list;
+  }, [voice.transcript, voice.partial]);
+
+  return {
+    status,
+    transcript,
+    errorMessage: voice.error ? voice.error.message : null,
+    endCall: voice.stop,
+  };
 }

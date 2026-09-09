@@ -1,27 +1,25 @@
-import { useAuth } from '@clerk/expo';
+import { useChat as usePersonaChat, useThreads } from '@personaai/react';
 import type {
   AgentFile,
   AgentTodo,
-  ChatSession,
-  ListResult,
   PendingApproval,
-  SessionState,
   TranscriptTurn,
 } from '@repo/contracts';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 
-import { SwasthyaAgent, turnsFrom, workspaceFrom, type ApprovalDecision } from './agent';
-import { ApiError, createApiClient } from './api';
+export const PERSONA_AGENT_ID = '6a82eda2b3d55db9792762cf';
 
-/**
- * The chat, as the app holds it.
- *
- * Two sources, kept deliberately apart. `GET /sessions/:id/messages` gives the
- * conversation as it was left, and the AG-UI agent gives what has happened
- * since -- so the thread is the restored turns followed by the live ones, and
- * neither has to be reconciled against the other.
- */
+export interface ApprovalDecision {
+  type: 'approve' | 'reject';
+  message?: string;
+}
 
 /** A conversation in the drawer. */
 export interface Conversation {
@@ -55,314 +53,219 @@ interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
-export function ChatProvider({ children }: { children: ReactNode }) {
-  const { getToken, isSignedIn } = useAuth();
-  const api = useMemo(() => createApiClient(() => getToken()), [getToken]);
+function parseArgs(raw?: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+export function ChatProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [answeredIndices, setAnsweredIndices] = useState<number[]>([]);
 
-  // What the server had, and what has happened since, held separately.
-  const [restored, setRestored] = useState<TranscriptTurn[]>([]);
-  const [live, setLive] = useState<TranscriptTurn[]>([]);
-  const [files, setFiles] = useState<AgentFile[]>([]);
-  const [todos, setTodos] = useState<AgentTodo[]>([]);
-  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
-  const [answers, setAnswers] = useState<Record<number, ApprovalDecision>>({});
+  const {
+    threads,
+    createThread,
+    deleteThread,
+    renameThread,
+    refetch: refetchThreads,
+  } = useThreads();
 
-  const agentRef = useRef<SwasthyaAgent | null>(null);
-  // Which conversation is open, readable from inside a run that is already
-  // under way -- state would be the value captured when the run started.
-  const activeIdRef = useRef<string | null>(null);
+  const {
+    messages,
+    sendMessage: personaSendMessage,
+    isStreaming,
+    isLoading,
+    error: personaError,
+    files: personaFiles,
+    todos: personaTodos,
+    interrupt,
+    resumeInterrupt,
+    clear: clearChat,
+    loadThreadMessages,
+  } = usePersonaChat({
+    agentId: PERSONA_AGENT_ID,
+    threadId: activeId ?? undefined,
+  });
 
-  const setActive = useCallback((id: string | null) => {
-    activeIdRef.current = id;
-    setActiveId(id);
-  }, []);
+  const conversations: Conversation[] = useMemo(() => {
+    return (threads ?? [])
+      .filter((t) => !t.isArchived)
+      .map((t) => ({
+        id: t._id,
+        title: t.title || 'New conversation',
+        updatedAt: t.updatedAt || t.createdAt,
+      }));
+  }, [threads]);
 
-  useEffect(() => {
-    if (!isSignedIn) {
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<ListResult<ChatSession>>('/sessions', { limit: 50 })
-      .then((result) => {
-        if (!cancelled) {
-          setConversations(result.items.map(toConversation));
-        }
-      })
-      .catch(() => {
-        // A failed list leaves the drawer empty; it is not worth interrupting
-        // someone who only wants to ask a question.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [api, isSignedIn]);
+  const turns = useMemo<TranscriptTurn[]>(() => {
+    return messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content || '',
+        toolCalls: (m.toolCalls ?? []).map((tc) => ({
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName.replace(/__/g, '.'),
+          args: parseArgs(tc.args),
+          result: tc.result ?? null,
+          isError: tc.isError ?? false,
+        })),
+      }));
+  }, [messages]);
 
-  /** Everything that belongs to one conversation, cleared together. */
-  const resetThread = useCallback(() => {
-    agentRef.current?.abortRun();
-    agentRef.current = null;
-    setRestored([]);
-    setLive([]);
-    setFiles([]);
-    setTodos([]);
-    setApprovals([]);
-    setAnswers({});
-    setPending(false);
-    setError(null);
-    setDraft('');
-  }, []);
+  const todos = useMemo<AgentTodo[]>(() => {
+    return (personaTodos ?? []).map((t) => ({
+      content: t.content,
+      status:
+        t.status === 'completed' || t.status === 'done'
+          ? 'completed'
+          : t.status === 'in_progress'
+            ? 'in_progress'
+            : 'pending',
+    }));
+  }, [personaTodos]);
+
+  const approvals = useMemo<PendingApproval[]>(() => {
+    if (!interrupt || interrupt.kind !== 'hitl') return [];
+    return interrupt.actionRequests.map((req, idx) => ({
+      index: idx,
+      toolName: req.name.replace(/__/g, '.'),
+      description:
+        ((req.args as Record<string, unknown>)?.description as string) ??
+        req.name,
+      args: (req.args as Record<string, unknown>) ?? {},
+    }));
+  }, [interrupt]);
 
   const newChat = useCallback(() => {
-    resetThread();
-    setActive(null);
-  }, [resetThread, setActive]);
-
-  /**
-   * Wire an agent up to this component's state.
-   *
-   * Both `onNewMessage` and `onMessagesChanged` re-read the whole list:
-   * adding the user's own message fires only the first, and streamed replies
-   * only the second, so listening to one of them would leave the thread a
-   * turn behind.
-   */
-  const attach = useCallback((agent: SwasthyaAgent) => {
-    const sync = () => setLive(turnsFrom(agent.messages));
-    agent.subscribe({
-      onNewMessage: sync,
-      onMessagesChanged: sync,
-      onStateChanged: () => {
-        const workspace = workspaceFrom(agent.state);
-        setFiles(workspace.files);
-        setTodos(workspace.todos);
-      },
-      onCustomEvent: ({ event }) => {
-        if (event.name === 'tool.confirmation_required') {
-          setApprovals((current) => [...current, event.value as PendingApproval]);
-        }
-        if (event.name === 'session.title') {
-          const { sessionId, title } = event.value as { sessionId: string; title: string };
-          setConversations((current) =>
-            current.map((item) => (item.id === sessionId ? { ...item, title } : item)),
-          );
-        }
-      },
-      // A run that fails ends by resolving, not by throwing, so this is the
-      // only place a rate limit or a model failure can be caught.
-      onRunErrorEvent: ({ event }) => setError(event.message),
-    });
-    return agent;
-  }, []);
-
-  /**
-   * Take the conversation from the server.
-   *
-   * Also run once a stream settles, which is what keeps a live answer and the
-   * same answer after a reload identical: the API merges an assistant's
-   * messages and folds each tool result onto its call, and a resumed run
-   * carries a result whose call was made before the stream even opened. The
-   * agent is dropped at the same time, since what it was holding has just
-   * become part of the restored conversation.
-   */
-  const refresh = useCallback(
-    async (sessionId: string) => {
-      const state = await api.get<SessionState>(`/sessions/${sessionId}/messages`);
-      if (activeIdRef.current !== sessionId) {
-        // Moved on while this was in flight -- starting a new chat during an
-        // answer must not pull the old conversation back onto the screen.
-        return;
-      }
-      agentRef.current = null;
-      setLive([]);
-      setRestored(state.messages);
-      setFiles(state.files);
-      setTodos(state.todos);
-      // A conversation left waiting on a write is still waiting on it.
-      setApprovals(state.pendingApprovals);
-      setAnswers({});
-    },
-    [api],
-  );
+    setActiveId(null);
+    setDraft('');
+    setAnsweredIndices([]);
+    clearChat();
+  }, [clearChat]);
 
   const selectConversation = useCallback(
     (id: string) => {
-      resetThread();
-      setActive(id);
-      refresh(id).catch((cause: unknown) => setError(messageFor(cause)));
+      setActiveId(id);
+      setDraft('');
+      setAnsweredIndices([]);
+      loadThreadMessages(id).catch((err) => {
+        console.warn('Failed to load thread messages:', err);
+      });
     },
-    [refresh, resetThread, setActive],
-  );
-
-  /** The agent for the open conversation, made on first use. */
-  const agentFor = useCallback(
-    (sessionId: string) => {
-      if (!agentRef.current) {
-        agentRef.current = attach(new SwasthyaAgent(sessionId, () => getToken()));
-      }
-      return agentRef.current;
-    },
-    [attach, getToken],
+    [loadThreadMessages],
   );
 
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || pending) {
+      if (!trimmed || isStreaming || isLoading) {
         return;
       }
       setDraft('');
-      setError(null);
-      setPending(true);
+      setAnsweredIndices([]);
 
       void (async () => {
         try {
-          // A new chat becomes a real session before the first message, so
-          // the run has somewhere to be checkpointed and the drawer has a
-          // row to rename once the title lands.
-          let sessionId = activeId;
-          if (!sessionId) {
-            const session = await api.post<ChatSession>('/sessions', {});
-            sessionId = session.id;
-            setConversations((current) => [toConversation(session), ...current]);
-            setActive(session.id);
+          let threadId = activeId;
+          if (!threadId) {
+            const thread = await createThread(PERSONA_AGENT_ID);
+            threadId = thread._id;
+            setActiveId(threadId);
           }
-
-          await agentFor(sessionId).ask(trimmed);
-          // Only on success: a failed read would otherwise wipe the answer
-          // that just arrived.
-          await refresh(sessionId).catch(() => undefined);
-        } catch (cause) {
-          setError(messageFor(cause));
-        } finally {
-          setPending(false);
+          await personaSendMessage(trimmed, { threadId });
+          void refetchThreads();
+        } catch (err) {
+          console.error('sendMessage failed:', err);
         }
       })();
     },
-    [activeId, agentFor, api, pending, refresh, setActive],
+    [
+      activeId,
+      createThread,
+      isLoading,
+      isStreaming,
+      personaSendMessage,
+      refetchThreads,
+    ],
   );
 
-  /**
-   * Record one answer, and resume once every pending write has one.
-   *
-   * The API takes a decision per pending action in the order they were
-   * offered. Sending as soon as the first button is pressed would answer the
-   * others by omission, so the run stays paused until the set is complete --
-   * which, for a single pending write, is immediately.
-   */
   const answerApproval = useCallback(
     (index: number, decision: ApprovalDecision) => {
-      const next = { ...answers, [index]: decision };
-      setAnswers(next);
-
-      const ordered = [...approvals].sort((a, b) => a.index - b.index);
-      if (!activeId || ordered.some((approval) => !next[approval.index])) {
-        return;
-      }
-
-      setPending(true);
-      setApprovals([]);
-      setAnswers({});
-      void (async () => {
-        try {
-          await agentFor(activeId).decide(ordered.map((approval) => next[approval.index]!));
-          await refresh(activeId).catch(() => undefined);
-        } catch (cause) {
-          setError(messageFor(cause));
-        } finally {
-          setPending(false);
-        }
-      })();
+      if (!interrupt || interrupt.kind !== 'hitl') return;
+      setAnsweredIndices((prev) => [...prev, index]);
+      void resumeInterrupt(
+        {
+          decisions: [
+            {
+              type: decision.type,
+              message: decision.message,
+            },
+          ],
+        },
+        decision.type === 'approve' ? 'Approved' : 'Rejected',
+      );
     },
-    [activeId, agentFor, answers, approvals, refresh],
+    [interrupt, resumeInterrupt],
   );
 
-  /**
-   * Rename applies immediately and reverts if the server refuses it, so a
-   * flaky connection doesn't leave the drawer showing a title that was never
-   * actually saved.
-   */
   const renameConversation = useCallback(
     async (id: string, title: string) => {
       const trimmed = title.trim();
-      if (!trimmed) {
-        return;
-      }
-      const previous = conversations.find((item) => item.id === id)?.title;
-      setConversations((current) =>
-        current.map((item) => (item.id === id ? { ...item, title: trimmed } : item)),
-      );
-      try {
-        await api.patch(`/sessions/${id}/title`, { title: trimmed });
-      } catch (cause) {
-        if (previous !== undefined) {
-          setConversations((current) =>
-            current.map((item) => (item.id === id ? { ...item, title: previous } : item)),
-          );
-        }
-        throw new Error(messageFor(cause));
-      }
+      if (!trimmed) return;
+      await renameThread(id, trimmed);
+      void refetchThreads();
     },
-    [api, conversations],
+    [refetchThreads, renameThread],
   );
 
-  /**
-   * Delete removes it from the drawer immediately, and drops the open thread
-   * too if it was the one showing -- an unrecoverable action should look
-   * unrecoverable right away, not linger until a request comes back.
-   */
   const deleteConversation = useCallback(
     async (id: string) => {
-      const removed = conversations.find((item) => item.id === id);
-      const wasActive = activeIdRef.current === id;
-
-      setConversations((current) => current.filter((item) => item.id !== id));
-      if (wasActive) {
-        resetThread();
-        setActive(null);
+      if (activeId === id) {
+        newChat();
       }
-
-      try {
-        await api.del(`/sessions/${id}`);
-      } catch (cause) {
-        if (removed) {
-          setConversations((current) =>
-            [...current, removed].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-          );
-        }
-        throw new Error(messageFor(cause));
-      }
+      await deleteThread(id);
+      void refetchThreads();
     },
-    [api, conversations, resetThread, setActive],
+    [activeId, deleteThread, newChat, refetchThreads],
   );
 
-  const turns = useMemo(() => [...restored, ...live], [restored, live]);
+  const fileAt = useCallback(
+    (filePath: string): AgentFile | null => {
+      const f = personaFiles?.[filePath];
+      if (!f) return null;
+      return {
+        path: filePath,
+        content: f.content,
+        size: f.size,
+      };
+    },
+    [personaFiles],
+  );
 
   const activeConversation = useMemo(() => {
+    if (!activeId) return null;
     const conversation = conversations.find((item) => item.id === activeId);
     return conversation ? { ...conversation, turns } : null;
   }, [conversations, activeId, turns]);
 
-  const fileAt = useCallback(
-    (filePath: string) => files.find((file) => file.path === filePath) ?? null,
-    [files],
-  );
-
-  const value = useMemo(
+  const value = useMemo<ChatContextValue>(
     () => ({
       conversations,
       activeConversation,
       turns,
       todos,
       approvals,
-      answered: Object.keys(answers).map(Number),
-      pending,
-      error,
+      answered: answeredIndices,
+      pending: isStreaming || isLoading,
+      error: personaError ? personaError.message : null,
       draft,
       setDraft,
       sendMessage,
@@ -379,9 +282,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       turns,
       todos,
       approvals,
-      answers,
-      pending,
-      error,
+      answeredIndices,
+      isStreaming,
+      isLoading,
+      personaError,
       draft,
       sendMessage,
       answerApproval,
@@ -420,25 +324,10 @@ export function groupConversations(
     b.updatedAt.localeCompare(a.updatedAt),
   )) {
     const age = now - new Date(conversation.updatedAt).getTime();
-    const bucket = age < day ? buckets[0] : age < 7 * day ? buckets[1] : buckets[2];
+    const bucket =
+      age < day ? buckets[0] : age < 7 * day ? buckets[1] : buckets[2];
     bucket!.items.push(conversation);
   }
 
   return buckets.filter((bucket) => bucket.items.length > 0);
-}
-
-/** Ordered by when it was last spoken in, not when the record changed. */
-function toConversation(session: ChatSession): Conversation {
-  return {
-    id: session.id,
-    title: session.title,
-    updatedAt: session.lastMessageAt ?? session.updatedAt,
-  };
-}
-
-function messageFor(cause: unknown): string {
-  if (cause instanceof ApiError) {
-    return cause.userMessage;
-  }
-  return 'Something went wrong. Try again.';
 }
