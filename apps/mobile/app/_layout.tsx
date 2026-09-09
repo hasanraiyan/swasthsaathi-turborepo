@@ -9,11 +9,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { PersonaProvider } from '@personaai/react';
+
 import { AppDrawer } from '../components/nav/AppDrawer';
+import { resolveBaseUrl } from '../lib/api';
 import { ChatProvider } from '../lib/chat-store';
 import { DrawerProvider } from '../lib/navigation';
 import { clerkAppearance, colors } from '../theme';
@@ -22,6 +25,20 @@ const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 if (!publishableKey) {
   throw new Error('Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to apps/mobile/.env.local');
+}
+
+function PersonaAppProvider({ children }: { children: React.ReactNode }) {
+  const { getToken } = useAuth();
+  const baseUrl = useMemo(() => `${resolveBaseUrl()}/persona`, []);
+  return (
+    <PersonaProvider
+      baseUrl={baseUrl}
+      getAuthToken={async () => getToken()}
+      defaultAgentId="6a82eda2b3d55db9792762cf"
+    >
+      {children}
+    </PersonaProvider>
+  );
 }
 
 export default function RootLayout() {
@@ -61,23 +78,25 @@ export default function RootLayout() {
         tokenCache={tokenCache}
         appearance={clerkAppearance}
       >
-        <QueryClientProvider client={queryClient}>
-          {/* Above the route tree, so a conversation and the drawer's state
-              both survive moving between sections. */}
-          <ChatProvider>
-            <DrawerProvider>
-              <ClerkLoading>
-                <Splash />
-              </ClerkLoading>
-              <ClerkLoaded>
-                <AuthGate />
-                {/* One drawer for the whole app, over every screen. */}
-                <AppDrawer />
-              </ClerkLoaded>
-            </DrawerProvider>
-          </ChatProvider>
-          <StatusBar style="dark" />
-        </QueryClientProvider>
+        <PersonaAppProvider>
+          <QueryClientProvider client={queryClient}>
+            {/* Above the route tree, so a conversation and the drawer's state
+                both survive moving between sections. */}
+            <ChatProvider>
+              <DrawerProvider>
+                <ClerkLoading>
+                  <Splash />
+                </ClerkLoading>
+                <ClerkLoaded>
+                  <AuthGate />
+                  {/* One drawer for the whole app, over every screen. */}
+                  <AppDrawer />
+                </ClerkLoaded>
+              </DrawerProvider>
+            </ChatProvider>
+            <StatusBar style="dark" />
+          </QueryClientProvider>
+        </PersonaAppProvider>
       </ClerkProvider>
     </SafeAreaProvider>
   );

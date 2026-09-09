@@ -199,6 +199,12 @@ importers:
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@57.0.1)(react-native@0.86.2(@babel/core@7.29.7)(@react-native/metro-config@0.87.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      '@personaai/react':
+        specifier: ^0.7.10
+        version: 0.7.10(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@personaai/sdk':
+        specifier: ^0.7.5
+        version: 0.7.5(zod@4.4.3)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

@@ -57,13 +57,31 @@ export class VoiceCallClient {
   private async open(): Promise<void> {
     this.setState(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
 
-    const token = await this.getToken?.();
-    const url = `${wsBaseUrl()}/voice${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    console.log(
-      `${TAG} opening socket (attempt ${this.reconnectAttempt}) -> ${url.replace(/token=[^&]+/, 'token=<redacted>')}`,
-    );
-    const socket = new WebSocket(url);
-    this.socket = socket;
+    try {
+      const token = await this.getToken?.();
+      const ticketRes = await fetch(`${resolveBaseUrl()}/persona/voice/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          agentId: '6a82eda2b3d55db9792762cf',
+          threadId: this.lastSessionId,
+        }),
+      });
+
+      if (!ticketRes.ok) {
+        throw new Error(`Failed to mint voice session (${ticketRes.status})`);
+      }
+
+      const ticket = (await ticketRes.json()) as { wsUrl: string };
+      const url = ticket.wsUrl;
+      console.log(
+        `${TAG} opening socket (attempt ${this.reconnectAttempt}) -> ${url.replace(/ticket=[^&]+/, 'ticket=<redacted>')}`,
+      );
+      const socket = new WebSocket(url);
+      this.socket = socket;
 
     socket.onopen = () => {
       console.log(`${TAG} socket open, sending call.start`);
@@ -135,6 +153,10 @@ export class VoiceCallClient {
       console.log(`${TAG} reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
       setTimeout(() => void this.open(), delay);
     };
+    } catch (err) {
+      console.warn(`${TAG} failed to open voice session:`, err);
+      this.setState('error');
+    }
   }
 
   sendAudioChunk(base64: string): void {

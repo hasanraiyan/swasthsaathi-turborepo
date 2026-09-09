@@ -1,3 +1,4 @@
+
 {
   "name": "mobile",
   "version": "1.0.0",
@@ -8,6 +9,8 @@
     "@clerk/expo": "^4.5.4",
     "@expo-google-fonts/baloo-2": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
+    "@personaai/react": "^0.7.10",
+    "@personaai/sdk": "^0.7.5",
     "@repo/contracts": "workspace:*",
     "@tanstack/react-query": "^5.102.3",
     "expo": "~57.0.16",

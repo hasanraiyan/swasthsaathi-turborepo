@@ -31,15 +31,9 @@ export class SwasthyaAgent extends HttpAgent {
   constructor(sessionId: string, getToken: () => Promise<string | null>) {
     const baseUrl = resolveBaseUrl();
     super({
-      // `agentId`, `threadId` and every `runId` below are passed explicitly
-      // on purpose. Left out, the SDK fills them in with `uuid`, which needs
-      // `crypto.getRandomValues` -- absent in React Native, so it would throw
-      // on the first run. These ids are correlation handles rather than
-      // secrets, so a counter is the honest way to make them; nothing here
-      // should look like it is producing random values when it is not.
-      agentId: 'swasthya-saathi',
+      agentId: '6a82eda2b3d55db9792762cf',
       threadId: sessionId,
-      url: `${baseUrl}/agent/run`,
+      url: `${baseUrl}/persona/chat`,
     });
     this.baseUrl = baseUrl;
     this.getToken = getToken;
@@ -67,22 +61,27 @@ export class SwasthyaAgent extends HttpAgent {
     });
   }
 
-  /** Starting or answering a run are different endpoints on this API. */
+  /** Starting or answering a run on Persona API. */
   override run(input: RunAgentInput) {
-    this.url = `${this.baseUrl}/agent/${isResume(input) ? 'resume' : 'run'}`;
+    this.url = `${this.baseUrl}/persona/${isResume(input) ? 'resume' : 'chat'}`;
     return super.run(input);
   }
 
   /**
-   * The API takes a message or a set of decisions, not a whole AG-UI run
-   * input: the conversation lives in the agent's checkpointer, keyed by the
-   * session, so replaying the transcript on every turn would only give the
-   * server a second, less trustworthy copy of what it already has.
+   * Formats the request payload for the Persona chat endpoint.
    */
   protected override requestInit(input: RunAgentInput): RequestInit {
     const body = isResume(input)
-      ? { sessionId: input.threadId, decisions: decisionsOf(input) }
-      : { sessionId: input.threadId, message: lastUserMessage(input.messages) };
+      ? {
+          agentId: '6a82eda2b3d55db9792762cf',
+          threadId: input.threadId,
+          resume: { decisions: decisionsOf(input) },
+        }
+      : {
+          agentId: '6a82eda2b3d55db9792762cf',
+          threadId: input.threadId,
+          messages: [{ role: 'user', content: lastUserMessage(input.messages) }],
+        };
 
     return {
       method: 'POST',
