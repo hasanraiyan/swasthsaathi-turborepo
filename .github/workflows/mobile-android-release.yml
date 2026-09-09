@@ -6,11 +6,11 @@ on:
       build_type:
         description: 'Build format'
         required: true
-        default: 'aab'
+        default: 'apk'
         type: choice
         options:
-          - aab
           - apk
+          - aab
           - both
 
 permissions:
@@ -34,6 +34,8 @@ jobs:
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 📦 Setup pnpm
         uses: pnpm/action-setup@v4
@@ -52,6 +54,9 @@ jobs:
 
       - name: 📱 Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: 🐘 Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: 🔢 Bump Android versionCode (release builds only)
         id: version
@@ -81,13 +86,13 @@ jobs:
           echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
 
       - name: 📥 Install dependencies
-        working-directory: .
+        working-directory: ${{ github.workspace }}
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @repo/contracts build
 
       - name: 🚀 Prebuild Android project
-        run: pnpm exec expo prebuild --platform android --clean
+        run: pnpm exec expo prebuild --platform android --clean --no-install
 
       - name: 🔐 Setup Release Keystore
         env:
@@ -138,6 +143,7 @@ jobs:
       - name: 🔨 Build Release APK & AAB
         working-directory: apps/mobile/android
         run: |
+          chmod +x gradlew
           BUILD_CHOICE="${{ github.event.inputs.build_type }}"
           if [ "$BUILD_CHOICE" = "apk" ]; then
             ./gradlew assembleRelease --no-daemon
@@ -165,7 +171,7 @@ jobs:
 
       - name: 💾 Commit bumped versionCode
         if: steps.version.outputs.is_release == 'true'
-        working-directory: .
+        working-directory: ${{ github.workspace }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
