@@ -28,7 +28,7 @@ jobs:
       # Production API URL (hosted on Render) — read from GitHub secret so it
       # can be updated without touching the workflow file.
       EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL || 'https://api.swasthsaathi.hasanraiyan.me/api' }}
-      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_dXNlZnVsLWVzY2FyZ290LTEyMjUuY2xlcmsuYWNjb3VudHMuZGV2JA' }}
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuc3dhc3Roc2FhdGhpLmhhc2FucmFpeWFuLm1lJA' }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
