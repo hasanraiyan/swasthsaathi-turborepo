@@ -1,17 +1,19 @@
+import { useVoice } from '@personaai/react';
 import Feather from '@expo/vector-icons/Feather';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PERSONA_AGENT_ID } from '../../lib/chat-store';
 import { colors, radii, spacing, type } from '../../theme';
-import { useVoiceCall } from './useVoiceCall';
 
 const STATUS_LABEL: Record<string, string> = {
+  idle: 'Calling…',
   connecting: 'Calling…',
-  ready: 'Connecting…',
-  active: 'On the call',
-  reconnecting: 'Reconnecting…',
+  listening: 'Listening…',
+  thinking: 'Thinking…',
+  speaking: 'Speaking…',
   ended: 'Call ended',
   error: 'Call failed',
 };
@@ -31,18 +33,57 @@ const CAPTION_HOLD_MS = 3_200;
 export function CallScreen({ sessionId }: { sessionId?: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { status, transcript, errorMessage, endCall } = useVoiceCall(sessionId);
 
-  const finished = status === 'ended' || status === 'error';
-  const active = status === 'active';
-  const connecting = status === 'connecting' || status === 'ready' || status === 'reconnecting';
+  const {
+    state,
+    transcript,
+    partial,
+    error,
+    start,
+    stop,
+  } = useVoice({
+    agentId: PERSONA_AGENT_ID,
+    threadId: sessionId,
+  });
+
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      start().catch((err: unknown) => {
+        console.warn('[voice] Failed to start:', err);
+      });
+    }
+    return () => {
+      stop();
+    };
+  }, [start, stop]);
+
+  const finished = state === 'ended' || state === 'error';
+  const active = state === 'listening' || state === 'speaking' || state === 'thinking';
+  const connecting = state === 'connecting' || state === 'idle';
+  const errorMessage = error?.message ?? null;
 
   // Only the assistant gets captioned -- this is meant to read like a phone's
   // live captions for what the *other* party is saying, not a transcript of
   // both sides.
-  const assistantLines = transcript.filter((line) => line.role === 'assistant');
-  const currentLine = assistantLines.at(-1) ?? null;
-  const words = currentLine ? currentLine.text.split(/\s+/).filter(Boolean) : [];
+  const assistantLines = useMemo(
+    () => transcript.filter((line) => line.speaker === 'agent'),
+    [transcript],
+  );
+
+  const currentLine = useMemo(() => {
+    if (partial && partial.speaker === 'agent' && partial.text.trim()) {
+      return { text: partial.text, committed: false };
+    }
+    const last = assistantLines.at(-1);
+    return last ? { text: last.text, committed: true } : null;
+  }, [assistantLines, partial]);
+
+  const words = useMemo(
+    () => (currentLine ? currentLine.text.split(/\s+/).filter(Boolean) : []),
+    [currentLine],
+  );
 
   // --- word-by-word reveal: paced independently of how chunky Gemini's own
   // transcript updates are, so the caption reads as spoken rather than dumped
@@ -163,7 +204,7 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
     if (finished) {
       leaveCall();
     } else {
-      endCall();
+      stop();
     }
   };
 
@@ -173,7 +214,7 @@ export function CallScreen({ sessionId }: { sessionId?: string }) {
         <View style={styles.statusBadge}>
           {active && <View style={styles.liveDot} />}
           <Text style={styles.status}>
-            {active ? formatDuration(elapsed) : (STATUS_LABEL[status] ?? status)}
+            {active ? formatDuration(elapsed) : (STATUS_LABEL[state] ?? state)}
           </Text>
         </View>
         {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
