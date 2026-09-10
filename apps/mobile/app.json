@@ -27,7 +27,12 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@clerk/expo",
+      [
+        "@clerk/expo",
+        {
+          "theme": "./clerk-theme.json"
+        }
+      ],
       "expo-font",
       "expo-router",
       "expo-dev-client",
@@ -39,6 +44,9 @@
           "enableBackgroundPlayback": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "clerkPublishableKey": "pk_live_Y2xlcmsuc3dhc3Roc2FhdGhpLmhhc2FucmFpeWFuLm1lJA"
+    }
   }
 }

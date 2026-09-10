@@ -55,6 +55,7 @@ export default function ProfileScreen() {
 
 function ProfileForm({ profile }: { profile: Profile }) {
   const { signOut } = useAuth();
+  const router = useRouter();
   const update = useUpdateProfile();
 
   const [fullName, setFullName] = useState(profile.fullName ?? '');
@@ -131,6 +132,14 @@ function ProfileForm({ profile }: { profile: Profile }) {
         />
       </View>
 
+      <View style={styles.manageAccount}>
+        <Button
+          label="Manage Clerk account"
+          onPress={() => router.push('/manage-account')}
+          variant="outline"
+        />
+      </View>
+
       <View style={styles.signOut}>
         <Button label="Sign out" onPress={() => void signOut()} variant="ghost" tone="danger" />
       </View>
@@ -195,5 +204,6 @@ const styles = StyleSheet.create({
   linkBody: { ...type.caption, color: colors.taupe, marginTop: 2 },
   invalid: { ...type.caption, color: colors.brick, marginTop: -spacing.sm, marginBottom: spacing.md },
   save: { marginTop: spacing.md },
+  manageAccount: { marginTop: spacing.md },
   signOut: { marginTop: spacing.lg },
 });

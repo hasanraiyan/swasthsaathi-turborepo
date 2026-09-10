@@ -17,15 +17,10 @@ import { PersonaProvider } from '@personaai/react';
 
 import { AppDrawer } from '../components/nav/AppDrawer';
 import { resolveBaseUrl } from '../lib/api';
+import { clerkPublishableKey } from '../lib/auth';
 import { ChatProvider } from '../lib/chat-store';
 import { DrawerProvider } from '../lib/navigation';
 import { clerkAppearance, colors } from '../theme';
-
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-if (!publishableKey) {
-  throw new Error('Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to apps/mobile/.env.local');
-}
 
 function PersonaAppProvider({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
@@ -74,7 +69,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ClerkProvider
-        publishableKey={publishableKey}
+        publishableKey={clerkPublishableKey}
         tokenCache={tokenCache}
         appearance={clerkAppearance}
       >
@@ -149,6 +144,7 @@ function AuthGate() {
       <Stack.Screen name="medicines/index" options={{ headerShown: false }} />
       <Stack.Screen name="records" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
+      <Stack.Screen name="manage-account" options={{ headerShown: false }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false }} />
 

@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/expo';
-import { AuthView } from '@clerk/expo/native';
+import { UserProfileView } from '@clerk/expo/native';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -8,36 +8,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 
 /**
- * Sign in or create an account on iOS & Android.
+ * Clerk's native account-management surface: avatar, email addresses,
+ * passkeys, connected accounts, security and account deletion.
  *
- * Uses Clerk's native AuthView component: renders whatever auth
- * strategies are enabled in the Clerk dashboard (Google, Apple,
- * email code, passkeys, etc.) and syncs the session to the JS SDK
- * automatically.
- *
- * Styled via clerk-theme.json matching SwasthSaathi's pine & cream identity.
+ * Uses Clerk's native UserProfileView, styled by clerk-theme.json.
  */
-export default function SignInScreen() {
+export default function ManageAccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.replace('/');
+    if (isLoaded && !isSignedIn) {
+      router.replace('/sign-in');
     }
   }, [isLoaded, isSignedIn, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <AuthView
-        mode="signInOrUp"
-        isDismissible={router.canGoBack()}
-        onDismiss={() => {
-          if (router.canGoBack()) {
-            router.back();
-          }
-        }}
+      <UserProfileView
+        style={styles.profile}
+        isDismissible={false}
+        onHostBack={() => router.back()}
       />
     </View>
   );
@@ -47,5 +39,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.cream,
+  },
+  profile: {
+    flex: 1,
   },
 });
