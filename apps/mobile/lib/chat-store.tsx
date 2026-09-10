@@ -269,13 +269,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       void (async () => {
         try {
-          let threadId = activeId;
-          if (!threadId) {
-            const thread = await createThread(PERSONA_AGENT_ID);
-            threadId = thread._id;
-            setActiveId(threadId);
-          }
-          await personaSendMessage(trimmed, { threadId });
+          // Lazy thread creation: pass an in-flight promise to personaSendMessage.
+          // personaSendMessage runs its optimistic UI update synchronously (adding
+          // the user message + streaming placeholder) BEFORE awaiting threadId!
+          const threadPromise: Promise<string | undefined> = activeId
+            ? Promise.resolve(activeId)
+            : createThread(PERSONA_AGENT_ID)
+                .then((thread) => {
+                  const newId = thread._id;
+                  setActiveId(newId);
+                  return newId;
+                })
+                .catch((err) => {
+                  console.warn('Lazy thread creation failed, proceeding without threadId:', err);
+                  return undefined;
+                });
+
+          await personaSendMessage(trimmed, { threadId: threadPromise });
           void refetchThreads();
         } catch (err) {
           console.error('sendMessage failed:', err);
