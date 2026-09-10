@@ -30,7 +30,8 @@ interface AuthenticatedRequest {
         return {
           baseUrl,
           credential,
-          routePrefix: '/api/persona',
+          routePrefix: 'persona',
+          mountPath: '/api/persona',
           resolveUserFrom: async (rawReq: unknown): Promise<string | null> => {
             const req = rawReq as AuthenticatedRequest;
             if (typeof req.auth?.userId === 'string') {
