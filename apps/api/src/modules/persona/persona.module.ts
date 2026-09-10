@@ -18,7 +18,7 @@ interface AuthenticatedRequest {
         const baseUrl =
           config.get<string>('PERSONA_BASE_URL') ||
           process.env.PERSONA_BASE_URL ||
-          'https://persona.hasanraiyan.me';
+          'https://api.persona.hasanraiyan.me';
         const credential =
           config.get<string>('PERSONA_CREDENTIAL') ||
           process.env.PERSONA_CREDENTIAL ||

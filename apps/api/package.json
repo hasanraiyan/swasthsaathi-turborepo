@@ -20,7 +20,8 @@
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --selectProjects integration",
     "test:e2e": "jest --selectProjects e2e",
-    "check-model": "node scripts/check-model.mjs"
+    "check-model": "node scripts/check-model.mjs",
+    "generate:openapi": "node -r ts-node/register/transpile-only scripts/generate-openapi.ts"
   },
   "dependencies": {
     "@ag-ui/core": "^0.0.58",
@@ -31,6 +32,7 @@
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-ws": "^11.2.3",
+    "@nestjs/swagger": "^11.4.7",
     "@nestjs/websockets": "^11.2.3",
     "@personaai/adapters": "^0.1.0",
     "@personaai/logger": "^0.1.0",
@@ -43,6 +45,7 @@
     "mongoose": "^9.9.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
@@ -56,6 +59,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "@types/ws": "^8.18.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
