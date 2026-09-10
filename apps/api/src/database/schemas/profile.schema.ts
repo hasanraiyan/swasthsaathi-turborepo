@@ -6,7 +6,7 @@ import {
   FAMILY_HISTORY,
   SEX_AT_BIRTH,
   TOBACCO_USE,
-} from '@repo/contracts';
+} from '../../common/enums';
 import type {
   ActivityLevel,
   AlcoholUse,
@@ -14,7 +14,7 @@ import type {
   FamilyHistoryItem,
   SexAtBirth,
   TobaccoUse,
-} from '@repo/contracts';
+} from '../../common/enums';
 import type { HydratedDocument } from 'mongoose';
 
 import { DATE_ONLY_MATCH, ownedSchemaOptions } from './schema-options';

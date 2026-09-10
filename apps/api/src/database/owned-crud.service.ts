@@ -1,4 +1,4 @@
-import type { Actor } from '@repo/contracts';
+import type { Actor } from '../common/types';
 import { Types } from 'mongoose';
 import type { QueryFilter, Model, SortOrder } from 'mongoose';
 

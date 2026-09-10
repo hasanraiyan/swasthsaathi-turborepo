@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Actor } from '@repo/contracts';
+import type { Actor } from '../common/types';
 import { Types } from 'mongoose';
 import type { Model } from 'mongoose';
 

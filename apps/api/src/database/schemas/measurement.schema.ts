@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MEASUREMENT_TYPE } from '@repo/contracts';
-import type { MeasurementType } from '@repo/contracts';
+import { MEASUREMENT_TYPE } from '../../common/enums';
+import type { MeasurementType } from '../../common/enums';
 import type { HydratedDocument } from 'mongoose';
 
 import { ownedSchemaOptions } from './schema-options';

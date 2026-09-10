@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MEDICINE_FORM, MEDICINE_STATUS } from '@repo/contracts';
-import type { MedicineForm, MedicineStatus } from '@repo/contracts';
+import { MEDICINE_FORM, MEDICINE_STATUS } from '../../common/enums';
+import type { MedicineForm, MedicineStatus } from '../../common/enums';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import type { HydratedDocument } from 'mongoose';
 

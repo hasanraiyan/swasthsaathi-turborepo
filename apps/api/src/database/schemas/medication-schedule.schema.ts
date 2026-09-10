@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { DOSE_TIMING } from '@repo/contracts';
-import type { DoseTiming } from '@repo/contracts';
+import { DOSE_TIMING } from '../../common/enums';
+import type { DoseTiming } from '../../common/enums';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import type { HydratedDocument } from 'mongoose';
 

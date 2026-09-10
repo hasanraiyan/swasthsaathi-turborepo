@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { DOCUMENT_KIND } from '@repo/contracts';
-import type { DocumentKind } from '@repo/contracts';
+import { DOCUMENT_KIND } from '../../common/enums';
+import type { DocumentKind } from '../../common/enums';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import type { HydratedDocument } from 'mongoose';
 

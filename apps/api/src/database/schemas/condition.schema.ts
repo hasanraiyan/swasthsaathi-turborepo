@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { CONDITION_SEVERITY, CONDITION_STATUS } from '@repo/contracts';
-import type { ConditionSeverity, ConditionStatus } from '@repo/contracts';
+import { CONDITION_SEVERITY, CONDITION_STATUS } from '../../common/enums';
+import type { ConditionSeverity, ConditionStatus } from '../../common/enums';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import type { HydratedDocument } from 'mongoose';
 

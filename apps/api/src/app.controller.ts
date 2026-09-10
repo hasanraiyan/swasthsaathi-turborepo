@@ -5,7 +5,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Actor } from '@repo/contracts';
+import type { Actor } from './common/types';
 
 import { AppService } from './app.service';
 import { CurrentActor } from './auth/actor.decorator';
@@ -17,13 +17,28 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @ApiOperation({
-    summary: 'API Health / Welcome Check',
+    summary: 'API Welcome Greeting',
     description: 'Returns a simple greeting indicating the Swasthya Saathi API is running.',
   })
-  @ApiResponse({ status: 200, description: 'API is healthy and online' })
+  @ApiResponse({ status: 200, description: 'API is online' })
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @ApiOperation({
+    summary: 'Health Check',
+    description: 'Returns API health status, timestamp, and version.',
+  })
+  @ApiResponse({ status: 200, description: 'Service health details' })
+  @Get('health')
+  getHealth() {
+    return {
+      status: 'ok',
+      service: 'Swasthya Saathi API',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   @ApiBearerAuth('clerk-jwt')

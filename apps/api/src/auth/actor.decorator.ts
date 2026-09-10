@@ -1,5 +1,5 @@
 import { ExecutionContext, createParamDecorator } from '@nestjs/common';
-import type { Actor } from '@repo/contracts';
+import type { Actor } from '../common/types';
 import type { Request } from 'express';
 
 /**

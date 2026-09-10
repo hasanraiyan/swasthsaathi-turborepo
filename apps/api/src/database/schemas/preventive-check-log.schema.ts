@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { PREVENTIVE_CHECK } from '@repo/contracts';
-import type { PreventiveCheckKey } from '@repo/contracts';
+import { PREVENTIVE_CHECK } from '../../common/enums';
+import type { PreventiveCheckKey } from '../../common/enums';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import type { HydratedDocument } from 'mongoose';
 
